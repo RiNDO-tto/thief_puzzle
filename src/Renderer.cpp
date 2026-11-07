@@ -16,33 +16,65 @@ void rect(sf::RenderWindow& window, sf::Vector2f pos, sf::Vector2f size,
     window.draw(shape);
 }
 
+// Textures are loaded once, not on every frame.
+struct CharacterTextures {
+    sf::Texture thief;
+    sf::Texture police;
+    bool thiefReady = false;
+    bool policeReady = false;
+
+    CharacterTextures() {
+        thiefReady = thief.loadFromFile("assets/images/thief.jpg");
+        policeReady = police.loadFromFile("assets/images/police.jpg");
+        if (thiefReady) thief.setSmooth(true);
+        if (policeReady) police.setSmooth(true);
+    }
+};
+
 void drawCharacter(sf::RenderWindow& window, const Character& c,
-                   sf::Color color, bool controlled) {
+                   const sf::Texture* texture, sf::Color fallbackColor,
+                   bool controlled) {
     const sf::Vector2f center(MARGIN + (c.x + .5f) * TILE,
                               MARGIN + (c.y + .5f) * TILE);
+    constexpr float CHARACTER_SIZE = 57.f;
+
+    // A square highlight fits the square characters better than a circle.
     if (controlled) {
-        sf::CircleShape ring(27.f);
-        ring.setOrigin({27.f, 27.f});
-        ring.setPosition(center);
-        ring.setFillColor(sf::Color::Transparent);
-        ring.setOutlineColor(sf::Color(255, 211, 65));
-        ring.setOutlineThickness(4.f);
-        window.draw(ring);
+        sf::RectangleShape highlight({CHARACTER_SIZE + 8.f, CHARACTER_SIZE + 8.f});
+        highlight.setOrigin({(CHARACTER_SIZE + 8.f) / 2.f,
+                             (CHARACTER_SIZE + 8.f) / 2.f});
+        highlight.setPosition(center);
+        highlight.setFillColor(sf::Color::Transparent);
+        highlight.setOutlineColor(sf::Color(255, 211, 65));
+        highlight.setOutlineThickness(3.f);
+        window.draw(highlight);
     }
+
+    if (texture) {
+        sf::Sprite sprite(*texture);
+        const sf::Vector2u imageSize = texture->getSize();
+        sprite.setOrigin({imageSize.x / 2.f, imageSize.y / 2.f});
+        sprite.setPosition(center);
+        sprite.setScale({CHARACTER_SIZE / imageSize.x,
+                         CHARACTER_SIZE / imageSize.y});
+        // UP=0, RIGHT=1, DOWN=2, LEFT=3.
+        sprite.setRotation(sf::degrees(90.f * static_cast<float>(c.direction)));
+        window.draw(sprite);
+        return;
+    }
+
+    // Fallback if an image is missing: retain the original circle and arrow.
     sf::CircleShape body(20.f);
     body.setOrigin({20.f, 20.f});
     body.setPosition(center);
-    body.setFillColor(color);
+    body.setFillColor(fallbackColor);
     window.draw(body);
-
-    // White triangle pointing in the character's current direction.
     sf::ConvexShape arrow(3);
     arrow.setPoint(0, {0.f, -15.f});
     arrow.setPoint(1, {-9.f, 8.f});
     arrow.setPoint(2, {9.f, 8.f});
-    arrow.setOrigin({0.f, 0.f});
     arrow.setPosition(center);
-    arrow.setRotation(sf::degrees(90.f * c.direction));
+    arrow.setRotation(sf::degrees(90.f * static_cast<float>(c.direction)));
     arrow.setFillColor(sf::Color::White);
     window.draw(arrow);
 }
@@ -93,8 +125,11 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
                      {TILE + WALL_THICKNESS, WALL_THICKNESS}, wallColor);
         }
     }
-    drawCharacter(window, s.thief, sf::Color(67, 154, 244), s.controlThief);
-    drawCharacter(window, s.police, sf::Color(240, 95, 99), !s.controlThief);
+    static CharacterTextures textures;
+    drawCharacter(window, s.thief, textures.thiefReady ? &textures.thief : nullptr,
+                  sf::Color(67, 154, 244), s.controlThief);
+    drawCharacter(window, s.police, textures.policeReady ? &textures.police : nullptr,
+                  sf::Color(240, 95, 99), !s.controlThief);
 }
 
 // Draw large WIN / LOSE letters without requiring an external font file.
@@ -158,3 +193,69 @@ void updateTitle(sf::RenderWindow& window, const State& s) {
     window.setTitle(title);
 }
 
+
+
+// HUD: presentation only. All game rules remain in Game.cpp.
+void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
+             std::size_t moves, const std::string& stageName) {
+    const float x = MARGIN * 2.f + b.width * TILE + 16.f;
+    const float top = 24.f;
+    const float panelWidth = 268.f;
+    const float panelHeight = static_cast<float>(window.getSize().y) - 48.f;
+    rect(window, {x, top}, {panelWidth, panelHeight}, sf::Color(39, 44, 58));
+    rect(window, {x, top}, {5.f, panelHeight}, sf::Color(91, 169, 237));
+
+    // Load a system font once. No font is distributed with the source code.
+    static sf::Font font;
+    static bool fontReady = [] {
+        const char* paths[] = {
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "C:/Windows/Fonts/arial.ttf"
+        };
+        for (const char* path : paths)
+            if (font.openFromFile(path)) return true;
+        return false;
+    }();
+    if (!fontReady) return;
+
+    auto label = [&](const std::string& value, float y, unsigned size, sf::Color color) {
+        sf::Text text(font, value, size);
+        text.setPosition({x + 20.f, y});
+        text.setFillColor(color);
+        window.draw(text);
+    };
+    const sf::Color muted(170, 181, 200);
+    const sf::Color white(237, 242, 249);
+    const sf::Color blue(86, 173, 255);
+    const sf::Color red(250, 115, 120);
+    label("THIEF PUZZLE", top + 18.f, 20, white);
+    label("STAGE", top + 63.f, 12, muted);
+    std::string shortName = stageName;
+    const auto slash = shortName.find_last_of("/\\");
+    if (slash != std::string::npos) shortName = shortName.substr(slash + 1);
+    if (shortName.size() > 24) shortName = shortName.substr(0, 21) + "...";
+    label(shortName, top + 82.f, 16, white);
+
+    label("CONTROLLING", top + 125.f, 12, muted);
+    rect(window, {x + 224.f, top + 149.f}, {14.f, 14.f}, s.controlThief ? blue : red);
+    label(s.controlThief ? "THIEF" : "POLICE", top + 140.f, 23,
+          s.controlThief ? blue : red);
+    label("MOVES", top + 192.f, 12, muted);
+    label(std::to_string(moves), top + 211.f, 26, white);
+
+    label("CONTROLS", top + 265.f, 12, muted);
+    label("W A S D  Move", top + 286.f, 15, white);
+    label("Z  Undo", top + 311.f, 15, white);
+    label("R  Restart", top + 336.f, 15, white);
+    label("Q / Esc  Quit", top + 361.f, 15, white);
+
+    // Use the remaining space for status if the window is tall enough.
+    if (panelHeight >= 470.f) {
+        label("STATUS", top + 406.f, 12, muted);
+        if (s.result == Result::Win) label("WIN", top + 428.f, 20, sf::Color(65, 210, 130));
+        else if (s.result == Result::Lose) label("LOSE", top + 428.f, 20, red);
+        else if (isStuck(b, s)) label("NO LEGAL MOVES", top + 428.f, 15, red);
+        else label("PLAYING", top + 428.f, 17, white);
+    }
+}
