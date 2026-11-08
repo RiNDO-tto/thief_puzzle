@@ -4,6 +4,7 @@
 #include <optional>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 int main(int argc, char* argv[]) {
     const std::string filename = argc > 1 ? argv[1] : "stages/stage01.txt";
@@ -13,8 +14,8 @@ int main(int argc, char* argv[]) {
     const State initialState = state;
     std::vector<State> history;
 
-    const unsigned width = static_cast<unsigned>(board.width * 76.f + 30.f * 2.f);
-    const unsigned height = static_cast<unsigned>(board.height * 76.f + 30.f * 2.f);
+    const unsigned width = static_cast<unsigned>(board.width * 76.f + 30.f * 2.f + 300.f);
+    const unsigned height = std::max(440u, static_cast<unsigned>(board.height * 76.f + 30.f * 2.f));
     sf::RenderWindow window(sf::VideoMode({width, height}), "Thief Puzzle");
     // Place the window in the center of the primary desktop.
     const sf::Vector2u desktop = sf::VideoMode::getDesktopMode().size;
@@ -64,6 +65,7 @@ int main(int argc, char* argv[]) {
         }
         window.clear(sf::Color(29, 32, 42));
         drawBoard(window, board, state);
+        drawHud(window, board, state, history.size(), filename);
         drawResultOverlay(window, state);
         window.display();
     }

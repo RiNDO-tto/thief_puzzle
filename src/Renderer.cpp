@@ -79,13 +79,53 @@ void drawCharacter(sf::RenderWindow& window, const Character& c,
     window.draw(arrow);
 }
 
+// Load tile art only once, just like the character textures.
+struct TileTextures {
+    sf::Texture hideout;
+    sf::Texture switchButton;
+    sf::Texture spikes;
+    bool hideoutReady = false;
+    bool switchReady = false;
+    bool spikesReady = false;
+
+    TileTextures() {
+        hideoutReady = hideout.loadFromFile("assets/images/hideout.png");
+        switchReady = switchButton.loadFromFile("assets/images/switch.png");
+        spikesReady = spikes.loadFromFile("assets/images/spikes.png");
+        if (hideoutReady) hideout.setSmooth(true);
+        if (switchReady) switchButton.setSmooth(true);
+        if (spikesReady) spikes.setSmooth(true);
+    }
+};
+
+// Fit each illustration inside one tile without distorting its aspect ratio.
+void drawTileImage(sf::RenderWindow& window, const sf::Texture& texture,
+                   sf::Vector2f center, float maxSize) {
+    const sf::Vector2u imageSize = texture.getSize();
+    if (imageSize.x == 0 || imageSize.y == 0) return;
+    sf::Sprite sprite(texture);
+    sprite.setOrigin({imageSize.x / 2.f, imageSize.y / 2.f});
+    sprite.setPosition(center);
+    const float scale = maxSize / static_cast<float>(std::max(imageSize.x, imageSize.y));
+    sprite.setScale({scale, scale});
+    window.draw(sprite);
+}
+
 void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
+    static TileTextures tileTextures;
     for (int y = 0; y < b.height; ++y) {
         for (int x = 0; x < b.width; ++x) {
             sf::Vector2f pos(MARGIN + x * TILE, MARGIN + y * TILE);
             rect(window, pos, {TILE - 1.f, TILE - 1.f}, sf::Color(56, 61, 75));
             char tile = b.cell[y][x];
-            if (tile == 'A') {
+            const sf::Vector2f center = pos + sf::Vector2f(TILE / 2.f, TILE / 2.f);
+            if (tile == 'A' && tileTextures.hideoutReady) {
+                drawTileImage(window, tileTextures.hideout, center, 62.f);
+            } else if (tile == 'S' && tileTextures.switchReady) {
+                drawTileImage(window, tileTextures.switchButton, center, 62.f);
+            } else if (tile == 'X' && tileTextures.spikesReady) {
+                drawTileImage(window, tileTextures.spikes, center, 62.f);
+            } else if (tile == 'A') {
                 rect(window, pos + sf::Vector2f(9.f, 9.f),
                      {TILE - 18.f, TILE - 18.f}, sf::Color(52, 157, 91));
             } else if (tile == 'S') {
