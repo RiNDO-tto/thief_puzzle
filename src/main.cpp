@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
         const std::string extra = argv[1];
         if (std::find(stages.begin(), stages.end(), extra) == stages.end()) stages.insert(stages.begin(), extra);
     }
-    sf::RenderWindow window(sf::VideoMode({1024u, 720u}), "Thief Puzzle");
+    sf::RenderWindow window(sf::VideoMode({1024u, 720u}), "泥棒と警察");
     const auto desktop = sf::VideoMode::getDesktopMode().size;
     window.setPosition({(static_cast<int>(desktop.x) - 1024) / 2,
                         (static_cast<int>(desktop.y) - 720) / 2});
@@ -46,6 +46,7 @@ int main(int argc, char* argv[]) {
     std::string currentFile;
     int selected = 0;
     bool hasStage = false;
+    bool endingShown = false;
     // Session-only completion flags: no save file is written.
     std::vector<StageProgress> progress(stages.size());
     auto isUnlocked = [&](int index) {
@@ -55,6 +56,15 @@ int main(int argc, char* argv[]) {
         return progress[index - 1].thief || progress[index - 1].police;
     };
 
+    auto allCleared = [&]() {
+        return !progress.empty() && std::all_of(progress.begin(), progress.end(),
+            [](const StageProgress& p) { return p.thief || p.police; });
+    };
+    auto returnToSelect = [&]() {
+        screen = (!endingShown && allCleared()) ? Screen::Ending : Screen::StageSelect;
+        if (screen == Screen::Ending) endingShown = true;
+        window.setTitle(sf::String(L"泥棒と警察"));
+    };
     auto openStage = [&](int index) {
         if (!isUnlocked(index)) return;
         Board loadedBoard;
@@ -98,6 +108,8 @@ int main(int argc, char* argv[]) {
             if (screen == Screen::Title) {
                 if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) screen = Screen::StageSelect;
                 else if (k == sf::Keyboard::Key::Escape) window.close();
+            } else if (screen == Screen::Ending) {
+                if (k == sf::Keyboard::Key::Enter) screen = Screen::StageSelect;
             } else if (screen == Screen::StageSelect) {
                 if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
                 else if (!stages.empty()) {
@@ -115,20 +127,19 @@ int main(int argc, char* argv[]) {
                     case sf::Keyboard::Key::S: direction = DOWN; break;
                     case sf::Keyboard::Key::A: direction = LEFT; break;
                     case sf::Keyboard::Key::Q:
-                        screen = Screen::StageSelect;
-                        window.setTitle("Thief Puzzle");
+                        returnToSelect();
                         break;
                     case sf::Keyboard::Key::R:
                         state = initialState;
                         history.clear();
-                        state.message = "Stage restarted!";
+                        state.message = "ステージをやり直しました！";
                         break;
                     case sf::Keyboard::Key::Z:
                         if (!history.empty()) {
                             state = history.back();
                             history.pop_back();
-                            state.message = "Undid one move.";
-                        } else state.message = "Nothing to undo!";
+                            state.message = "1手戻しました。";
+                        } else state.message = "戻せる手がありません！";
                         break;
                     default: break;
                 }
@@ -148,11 +159,27 @@ int main(int argc, char* argv[]) {
         }
         if (screen == Screen::Title) menu.drawTitle(window);
         else if (screen == Screen::StageSelect) menu.drawStageSelect(window, stages, selected, progress);
+        else if (screen == Screen::Ending) menu.drawEnding(window);
         else {
             window.clear(sf::Color(29, 32, 42));
+            // 70% for the board, 30% for the instructions.
+            const sf::View oldView = window.getView();
+            const float boardW = board.width * 76.f + 60.f;
+            const float boardH = board.height * 76.f + 60.f;
+            const float scale = std::max(boardW / (1024.f * .7f), boardH / 720.f);
+            sf::View boardView(sf::FloatRect({0.f, 0.f}, {1024.f * .7f * scale, 720.f * scale}));
+            boardView.setCenter({boardW / 2.f, boardH / 2.f});
+            boardView.setViewport(sf::FloatRect({0.f, 0.f}, {.7f, 1.f}));
+            window.setView(boardView);
             drawBoard(window, board, state);
+            // HUD retains its original 268-unit layout in a separate viewport.
+            const float hudX = 60.f + board.width * 76.f + 16.f;
+            sf::View hudView(sf::FloatRect({hudX - 4.f, 0.f}, {300.f, 720.f}));
+            hudView.setViewport(sf::FloatRect({.7f, 0.f}, {.3f, 1.f}));
+            window.setView(hudView);
             drawHud(window, board, state, history.size(), currentFile);
-            drawResultOverlay(window, state);
+            window.setView(oldView);
+            menu.drawPlayingResult(window, state);
         }
         window.display();
     }

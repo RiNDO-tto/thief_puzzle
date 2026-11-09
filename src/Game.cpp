@@ -216,7 +216,7 @@ bool loadStage(const string& filename, Board& b, State& s) {
 // Advance the game by one valid move.
 bool takeTurn(const Board& b, State& s, int d) {
     if (s.result != Result::Playing) {
-        s.message = "Game over. Press Z to undo or R to restart.";
+        s.message = "終了しました。Z：戻す / R：やり直す";
         return false;
     }
 
@@ -225,13 +225,13 @@ bool takeTurn(const Board& b, State& s, int d) {
 
     // 1. No backward movement for the controlled side.
     if (d == opposite(controlled.direction)) {
-        s.message = "Cannot move backward!";
+        s.message = "後ろには進めません！";
         return false;
     }
 
     // 2. Invalid controlled movement cancels the turn.
     if (!canMove(b, controlled, d)) {
-        s.message = "Blocked by a wall or boundary!";
+        s.message = "壁があって進めません！";
         return false;
     }
 
@@ -268,7 +268,7 @@ bool takeTurn(const Board& b, State& s, int d) {
 
     if (onSpike) {
         next.result = Result::Lose;
-        next.message = "Someone touched spikes!";
+        next.message = "トゲに触れてしまいました！";
     }
     else {
         // 4. Meeting or crossing.
@@ -287,8 +287,8 @@ bool takeTurn(const Board& b, State& s, int d) {
                 s.controlThief ? Result::Lose : Result::Win;
 
             next.message = s.controlThief
-                ? "The thief was arrested!"
-                : "The police arrested the thief!";
+                ? "泥棒が逮捕されました！"
+                : "警察が泥棒を逮捕しました！";
         }
         else if (b.cell[next.thief.y][next.thief.x] == 'A') {
             // 5. Thief reaches hideout.
@@ -296,8 +296,8 @@ bool takeTurn(const Board& b, State& s, int d) {
                 s.controlThief ? Result::Win : Result::Lose;
 
             next.message = s.controlThief
-                ? "The thief reached the hideout!"
-                : "The thief escaped!";
+                ? "泥棒がアジトに到着しました！"
+                : "泥棒が逃げ切りました！";
         }
     }
 
@@ -309,7 +309,7 @@ bool takeTurn(const Board& b, State& s, int d) {
 
         if (b.cell[c.y][c.x] == 'S') {
             next.controlThief = !s.controlThief;
-            next.message = "Switch activated! Control changed.";
+            next.message = "スイッチで操作が交代しました！";
         }
     }
 

@@ -79,53 +79,13 @@ void drawCharacter(sf::RenderWindow& window, const Character& c,
     window.draw(arrow);
 }
 
-// Load tile art only once, just like the character textures.
-struct TileTextures {
-    sf::Texture hideout;
-    sf::Texture switchButton;
-    sf::Texture spikes;
-    bool hideoutReady = false;
-    bool switchReady = false;
-    bool spikesReady = false;
-
-    TileTextures() {
-        hideoutReady = hideout.loadFromFile("assets/images/hideout.png");
-        switchReady = switchButton.loadFromFile("assets/images/switch.png");
-        spikesReady = spikes.loadFromFile("assets/images/spikes.png");
-        if (hideoutReady) hideout.setSmooth(true);
-        if (switchReady) switchButton.setSmooth(true);
-        if (spikesReady) spikes.setSmooth(true);
-    }
-};
-
-// Fit each illustration inside one tile without distorting its aspect ratio.
-void drawTileImage(sf::RenderWindow& window, const sf::Texture& texture,
-                   sf::Vector2f center, float maxSize) {
-    const sf::Vector2u imageSize = texture.getSize();
-    if (imageSize.x == 0 || imageSize.y == 0) return;
-    sf::Sprite sprite(texture);
-    sprite.setOrigin({imageSize.x / 2.f, imageSize.y / 2.f});
-    sprite.setPosition(center);
-    const float scale = maxSize / static_cast<float>(std::max(imageSize.x, imageSize.y));
-    sprite.setScale({scale, scale});
-    window.draw(sprite);
-}
-
 void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
-    static TileTextures tileTextures;
     for (int y = 0; y < b.height; ++y) {
         for (int x = 0; x < b.width; ++x) {
             sf::Vector2f pos(MARGIN + x * TILE, MARGIN + y * TILE);
             rect(window, pos, {TILE - 1.f, TILE - 1.f}, sf::Color(56, 61, 75));
             char tile = b.cell[y][x];
-            const sf::Vector2f center = pos + sf::Vector2f(TILE / 2.f, TILE / 2.f);
-            if (tile == 'A' && tileTextures.hideoutReady) {
-                drawTileImage(window, tileTextures.hideout, center, 62.f);
-            } else if (tile == 'S' && tileTextures.switchReady) {
-                drawTileImage(window, tileTextures.switchButton, center, 62.f);
-            } else if (tile == 'X' && tileTextures.spikesReady) {
-                drawTileImage(window, tileTextures.spikes, center, 62.f);
-            } else if (tile == 'A') {
+            if (tile == 'A') {
                 rect(window, pos + sf::Vector2f(9.f, 9.f),
                      {TILE - 18.f, TILE - 18.f}, sf::Color(52, 157, 91));
             } else if (tile == 'S') {
@@ -225,15 +185,13 @@ void drawResultOverlay(sf::RenderWindow& window, const State& s) {
 }
 
 void updateTitle(sf::RenderWindow& window, const State& s) {
-    std::string title = "Thief Puzzle | Control: ";
-    title += s.controlThief ? "Thief" : "Police";
-    if (s.result == Result::Win) title += " | WIN!";
-    else if (s.result == Result::Lose) title += " | LOSE";
+    std::string title = "泥棒と警察 | 操作中：";
+    title += s.controlThief ? "泥棒" : "警察";
+    if (s.result == Result::Win) title += " | 成功！";
+    else if (s.result == Result::Lose) title += " | 失敗";
     if (!s.message.empty()) title += " | " + s.message;
-    window.setTitle(title);
+    window.setTitle(sf::String::fromUtf8(title.begin(), title.end()));
 }
-
-
 
 // HUD: presentation only. All game rules remain in Game.cpp.
 void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
@@ -241,7 +199,7 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
     const float x = MARGIN * 2.f + b.width * TILE + 16.f;
     const float top = 24.f;
     const float panelWidth = 268.f;
-    const float panelHeight = static_cast<float>(window.getSize().y) - 48.f;
+    const float panelHeight = 672.f;
     rect(window, {x, top}, {panelWidth, panelHeight}, sf::Color(39, 44, 58));
     rect(window, {x, top}, {5.f, panelHeight}, sf::Color(91, 169, 237));
 
@@ -249,6 +207,12 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
     static sf::Font font;
     static bool fontReady = [] {
         const char* paths[] = {
+            "assets/fonts/menu.ttf",
+            "assets/fonts/NotoSansCJKjp-Regular.otf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/mnt/c/Windows/Fonts/meiryo.ttc",
+            "/mnt/c/Windows/Fonts/YuGothR.ttc",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
             "C:/Windows/Fonts/arial.ttf"
@@ -260,7 +224,7 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
     if (!fontReady) return;
 
     auto label = [&](const std::string& value, float y, unsigned size, sf::Color color) {
-        sf::Text text(font, value, size);
+        sf::Text text(font, sf::String::fromUtf8(value.begin(), value.end()), size);
         text.setPosition({x + 20.f, y});
         text.setFillColor(color);
         window.draw(text);
@@ -269,33 +233,33 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
     const sf::Color white(237, 242, 249);
     const sf::Color blue(86, 173, 255);
     const sf::Color red(250, 115, 120);
-    label("THIEF PUZZLE", top + 18.f, 20, white);
-    label("STAGE", top + 63.f, 12, muted);
+    label("泥棒と警察", top + 18.f, 20, white);
+    label("ステージ", top + 63.f, 12, muted);
     std::string shortName = stageName;
     const auto slash = shortName.find_last_of("/\\");
     if (slash != std::string::npos) shortName = shortName.substr(slash + 1);
     if (shortName.size() > 24) shortName = shortName.substr(0, 21) + "...";
     label(shortName, top + 82.f, 16, white);
 
-    label("CONTROLLING", top + 125.f, 12, muted);
+    label("操作中", top + 125.f, 12, muted);
     rect(window, {x + 224.f, top + 149.f}, {14.f, 14.f}, s.controlThief ? blue : red);
-    label(s.controlThief ? "THIEF" : "POLICE", top + 140.f, 23,
+    label(s.controlThief ? "泥棒" : "警察", top + 140.f, 23,
           s.controlThief ? blue : red);
-    label("MOVES", top + 192.f, 12, muted);
+    label("手数", top + 192.f, 12, muted);
     label(std::to_string(moves), top + 211.f, 26, white);
 
-    label("CONTROLS", top + 265.f, 12, muted);
-    label("W A S D  Move", top + 286.f, 15, white);
-    label("Z  Undo", top + 311.f, 15, white);
-    label("R  Restart", top + 336.f, 15, white);
-    label("Q / Esc  Quit", top + 361.f, 15, white);
+    label("操作方法", top + 265.f, 12, muted);
+    label("WASD  移動", top + 286.f, 15, white);
+    label("Z  1手戻す", top + 311.f, 15, white);
+    label("R  やり直す", top + 336.f, 15, white);
+    label("Q  ステージ選択", top + 361.f, 15, white);
 
     // Use the remaining space for status if the window is tall enough.
     if (panelHeight >= 470.f) {
-        label("STATUS", top + 406.f, 12, muted);
-        if (s.result == Result::Win) label("WIN", top + 428.f, 20, sf::Color(65, 210, 130));
-        else if (s.result == Result::Lose) label("LOSE", top + 428.f, 20, red);
-        else if (isStuck(b, s)) label("NO LEGAL MOVES", top + 428.f, 15, red);
-        else label("PLAYING", top + 428.f, 17, white);
+        label("状態", top + 406.f, 12, muted);
+        if (s.result == Result::Win) label("成功", top + 428.f, 20, sf::Color(65, 210, 130));
+        else if (s.result == Result::Lose) label("失敗", top + 428.f, 20, red);
+        else if (isStuck(b, s)) label("動けません", top + 428.f, 15, red);
+        else label("プレイ中", top + 428.f, 17, white);
     }
 }

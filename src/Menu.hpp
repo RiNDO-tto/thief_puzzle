@@ -1,9 +1,10 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <string>
+#include "Game.hpp"
 #include <vector>
 
-enum class Screen { Title, StageSelect, Playing };
+enum class Screen { Title, StageSelect, Playing, Ending };
 
 struct StageProgress {
     bool thief = false;
@@ -13,6 +14,8 @@ struct StageProgress {
 class Menu {
 public:
     Menu();
+    void drawEnding(sf::RenderWindow& window) const;
+    void drawPlayingResult(sf::RenderWindow& window, const State& state) const;
     void drawTitle(sf::RenderWindow& window) const;
     void drawStageSelect(sf::RenderWindow& window, const std::vector<std::string>& stages, int selected,
                          const std::vector<StageProgress>& progress) const;
