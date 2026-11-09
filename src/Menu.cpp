@@ -1,6 +1,7 @@
 #include "Menu.hpp"
 #include <algorithm>
 #include <filesystem>
+#include <cmath>
 
 namespace {
 constexpr float WIDTH = 1024.f;
@@ -18,6 +19,18 @@ void block(sf::RenderWindow& w, sf::FloatRect r, sf::Color fill, sf::Color outli
     shape.setOutlineThickness(4.f);
     w.draw(shape);
 }
+}
+
+void rectCorner(sf::RenderWindow& w, float x, float y, int right, int bottom,
+                float arm, float thick, sf::Color color) {
+    sf::RectangleShape horizontal({arm, thick});
+    horizontal.setPosition({right ? x - arm : x, bottom ? y - thick : y});
+    horizontal.setFillColor(color);
+    w.draw(horizontal);
+    sf::RectangleShape vertical({thick, arm});
+    vertical.setPosition({right ? x - thick : x, bottom ? y - arm : y});
+    vertical.setFillColor(color);
+    w.draw(vertical);
 }
 
 Menu::Menu() {
@@ -57,10 +70,11 @@ void Menu::drawTitle(sf::RenderWindow& w) const {
     // Hand-drawn-style placeholder: big title panel and simple geometric decoration.
     block(w, {{122.f, 88.f}, {780.f, 225.f}}, cream);
     text(w, "泥棒と警察", 57, {WIDTH / 2.f, 170.f}, ink);
-    text(w, "ふたつの勝利を目指すパズル", 24, {WIDTH / 2.f, 247.f}, ink);
-    button(w, {{BUTTON_X, 393.f}, {BUTTON_W, BUTTON_H}}, "はじめる", true);
-    button(w, {{BUTTON_X, 492.f}, {BUTTON_W, BUTTON_H}}, "設定（準備中）");
-    text(w, "Enter：はじめる　 Esc：終了", 18, {WIDTH / 2.f, 648.f}, ink);
+    text(w, "ひとつの操作、ふたつの運命。", 24, {WIDTH / 2.f, 247.f}, ink);
+    button(w, {{BUTTON_X, 356.f}, {BUTTON_W, 68.f}}, "スタート", true);
+    button(w, {{BUTTON_X, 445.f}, {BUTTON_W, 68.f}}, "ゲーム説明");
+    button(w, {{BUTTON_X, 534.f}, {BUTTON_W, 68.f}}, "設定（準備中）");
+    text(w, "Enter：スタート　 Esc：終了", 18, {WIDTH / 2.f, 665.f}, ink);
 }
 void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& stages, int selected,
                            const std::vector<StageProgress>& progress) const {
@@ -88,8 +102,7 @@ void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& 
         const bool thiefDone = i < static_cast<int>(progress.size()) && progress[i].thief;
         const bool policeDone = i < static_cast<int>(progress.size()) && progress[i].police;
         block(w, {{x, y}, {180.f, 86.f}},
-              unlocked ? (i == selected ? sf::Color(252, 212, 108) : cream)
-                       : sf::Color(177, 182, 176));
+              unlocked ? cream : sf::Color(177, 182, 176));
         text(w, unlocked ? name : name + " 鍵", 23, {x + 90.f, y + 22.f}, ink);
         auto lamp = [&](float cx, bool lit, sf::Color on) {
             sf::CircleShape glow(15.f);
@@ -108,13 +121,39 @@ void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& 
         lamp(x + 67.f, thiefDone, sf::Color(255, 210, 69));
         lamp(x + 113.f, policeDone, sf::Color(83, 191, 255));
     }
+    // Four L-shaped corner brackets glide toward the selected stage.
+    const int localSelected = selected - start;
+    const sf::Vector2f target{105.f + (localSelected % 4) * 210.f,
+                              190.f + (localSelected / 4) * 103.f};
+    if (!cursorReady_) { cursorPosition_ = target; cursorReady_ = true; cursorClock_.restart(); }
+    const float dt = std::min(cursorClock_.restart().asSeconds(), 0.05f);
+    const float blend = 1.f - std::exp(-13.f * dt);
+    cursorPosition_ += (target - cursorPosition_) * blend;
+    const float x = cursorPosition_.x - 7.f;
+    const float y = cursorPosition_.y - 7.f;
+ 
+    constexpr float markerW = 194.f;
+    constexpr float h = 100.f;
+    constexpr float arm = 23.f;
+    constexpr float thick = 5.f;
+
+    const sf::Color marker(47, 85, 145);
+
+    for (int side = 0; side < 2; ++side) {
+        for (int vertical = 0; vertical < 2; ++vertical) {
+            const float px = x + (side ? markerW : 0.f);
+            const float py = y + (vertical ? h : 0.f);
+            rectCorner(w, px, py, side, vertical, arm, thick, marker);
+        }
+    }
     text(w, "ページ " + std::to_string(page + 1) + " / " + std::to_string((stages.size() + 15) / 16),
          20, {WIDTH / 2.f, 654.f}, ink);
 }
 int Menu::titleClick(sf::Vector2f p) const {
     if (p.x >= BUTTON_X && p.x <= BUTTON_X + BUTTON_W) {
-        if (p.y >= 393.f && p.y <= 393.f + BUTTON_H) return 0;
-        if (p.y >= 492.f && p.y <= 492.f + BUTTON_H) return 1;
+        if (p.y >= 356.f && p.y <= 424.f) return 0;
+        if (p.y >= 445.f && p.y <= 513.f) return 1;
+        if (p.y >= 534.f && p.y <= 602.f) return 2;
     }
     return -1;
 }
@@ -122,7 +161,7 @@ int Menu::stageClick(sf::Vector2f p, int count) const {
     for (int i = 0; i < count && i < 16; ++i) {
         const float x = 105.f + (i % 4) * 210.f;
         const float y = 190.f + (i / 4) * 103.f;
-        if (p.x >= x && p.x <= x + 180.f && p.y >= y && p.y <= y + 76.f) return i;
+        if (p.x >= x && p.x <= x + 180.f && p.y >= y && p.y <= y + 86.f) return i;
     }
     return -1;
 }
@@ -140,4 +179,24 @@ void Menu::drawPlayingResult(sf::RenderWindow& w, const State& s) const {
     text(w, s.result == Result::Win ? "目標達成！" : "失敗！", 48,
          {410.f, 345.f}, s.result == Result::Win ? sf::Color(126, 234, 157) : sf::Color(255, 141, 143));
     text(w, "Q：ステージ選択へ　 R：やり直す", 19, {410.f, 402.f}, sf::Color::White);
+}
+
+void Menu::drawHowTo(sf::RenderWindow& w) const {
+    w.clear(sf::Color(179, 216, 198));
+    text(w, "ゲーム説明", 46, {512.f, 65.f}, ink);
+    block(w, {{72.f, 115.f}, {880.f, 520.f}}, cream);
+    auto section = [&](const std::string& title, const std::vector<std::string>& lines, float y) {
+        text(w, title, 25, {110.f, y}, ink, false);
+        for (std::size_t i = 0; i < lines.size(); ++i)
+            text(w, lines[i], 19, {118.f, y + 40.f + 30.f * static_cast<float>(i)}, ink, false);
+    };
+    section("目標", {"泥棒を操作してアジトに到達するか、警察を操作して泥棒を捕まえれば成功です。",
+                     "両方の目標達成を目指しましょう。"}, 133.f);
+    section("2人の動きは連動する", {"泥棒を操作すると警察も同じ方向へ、警察を操作すると泥棒は反対方向へ動こうとします。",
+                              "壁があれば移動できません。"}, 268.f);
+    section("移動制約とギミック", {"操作中のキャラクターは後退できず、壁の方を向けません。",
+                              "スイッチで操作対象が交代し、誰かがトゲに触れると失敗です。（キャラが〇んだら悲しいので）"}, 403.f);
+    text(w, "WASD：移動　 Z：1手戻す　 R：やり直す　 Q：ステージ選択", 17,
+         {512.f, 578.f}, ink);
+    text(w, "Esc：タイトルへ戻る", 20, {512.f, 670.f}, ink);
 }

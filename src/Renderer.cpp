@@ -18,14 +18,26 @@ void rect(sf::RenderWindow& window, sf::Vector2f pos, sf::Vector2f size,
 
 // Textures are loaded once, not on every frame.
 struct CharacterTextures {
+    sf::Texture hideout;
+    sf::Texture spikes;
+    sf::Texture sw;
+    bool hideoutReady = false;
+    bool spikesReady = false;
+    bool switchReady = false;
     sf::Texture thief;
     sf::Texture police;
     bool thiefReady = false;
     bool policeReady = false;
 
     CharacterTextures() {
+        hideoutReady = hideout.loadFromFile("assets/images/hideout.png");
+        spikesReady = spikes.loadFromFile("assets/images/spikes.png");
+        switchReady = sw.loadFromFile("assets/images/switch.png");
         thiefReady = thief.loadFromFile("assets/images/thief.jpg");
         policeReady = police.loadFromFile("assets/images/police.jpg");
+        if (hideoutReady) hideout.setSmooth(true);
+        if (spikesReady) spikes.setSmooth(true);
+        if (switchReady) sw.setSmooth(true);
         if (thiefReady) thief.setSmooth(true);
         if (policeReady) police.setSmooth(true);
     }
@@ -80,12 +92,29 @@ void drawCharacter(sf::RenderWindow& window, const Character& c,
 }
 
 void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
+    static CharacterTextures textures;
+    auto drawTileImage = [&](const sf::Texture& texture, sf::Vector2f pos) {
+        const sf::Vector2u sz = texture.getSize();
+        if (!sz.x || !sz.y) return;
+        sf::Sprite sprite(texture);
+        sprite.setOrigin({sz.x / 2.f, sz.y / 2.f});
+        sprite.setPosition(pos + sf::Vector2f(TILE / 2.f, TILE / 2.f));
+        const float scale = (TILE - 15.f) / static_cast<float>(std::max(sz.x, sz.y));
+        sprite.setScale({scale, scale});
+        window.draw(sprite);
+    };
     for (int y = 0; y < b.height; ++y) {
         for (int x = 0; x < b.width; ++x) {
             sf::Vector2f pos(MARGIN + x * TILE, MARGIN + y * TILE);
             rect(window, pos, {TILE - 1.f, TILE - 1.f}, sf::Color(56, 61, 75));
             char tile = b.cell[y][x];
-            if (tile == 'A') {
+            if (tile == 'A' && textures.hideoutReady) {
+                drawTileImage(textures.hideout, pos);
+            } else if (tile == 'S' && textures.switchReady) {
+                drawTileImage(textures.sw, pos);
+            } else if (tile == 'X' && textures.spikesReady) {
+                drawTileImage(textures.spikes, pos);
+            } else if (tile == 'A') {
                 rect(window, pos + sf::Vector2f(9.f, 9.f),
                      {TILE - 18.f, TILE - 18.f}, sf::Color(52, 157, 91));
             } else if (tile == 'S') {
@@ -125,7 +154,6 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
                      {TILE + WALL_THICKNESS, WALL_THICKNESS}, wallColor);
         }
     }
-    static CharacterTextures textures;
     drawCharacter(window, s.thief, textures.thiefReady ? &textures.thief : nullptr,
                   sf::Color(67, 154, 244), s.controlThief);
     drawCharacter(window, s.police, textures.policeReady ? &textures.police : nullptr,

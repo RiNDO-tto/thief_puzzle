@@ -90,7 +90,11 @@ int main(int argc, char* argv[]) {
             if (const auto* mouse = event->getIf<sf::Event::MouseButtonPressed>()) {
                 if (mouse->button == sf::Mouse::Button::Left) {
                     const sf::Vector2f p = window.mapPixelToCoords(mouse->position);
-                    if (screen == Screen::Title && menu.titleClick(p) == 0) screen = Screen::StageSelect;
+                    if (screen == Screen::Title) {
+                        const int action = menu.titleClick(p);
+                        if (action == 0) screen = Screen::StageSelect;
+                        else if (action == 1) screen = Screen::HowTo;
+                    }
                     else if (screen == Screen::StageSelect) {
                         const int page = selected / 16;
                         const int clicked = menu.stageClick(p, std::min(16, static_cast<int>(stages.size()) - page * 16));
@@ -108,6 +112,8 @@ int main(int argc, char* argv[]) {
             if (screen == Screen::Title) {
                 if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) screen = Screen::StageSelect;
                 else if (k == sf::Keyboard::Key::Escape) window.close();
+            } else if (screen == Screen::HowTo) {
+                if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
             } else if (screen == Screen::Ending) {
                 if (k == sf::Keyboard::Key::Enter) screen = Screen::StageSelect;
             } else if (screen == Screen::StageSelect) {
@@ -159,6 +165,7 @@ int main(int argc, char* argv[]) {
         }
         if (screen == Screen::Title) menu.drawTitle(window);
         else if (screen == Screen::StageSelect) menu.drawStageSelect(window, stages, selected, progress);
+        else if (screen == Screen::HowTo) menu.drawHowTo(window);
         else if (screen == Screen::Ending) menu.drawEnding(window);
         else {
             window.clear(sf::Color(29, 32, 42));
