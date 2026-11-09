@@ -70,7 +70,7 @@ void Menu::drawTitle(sf::RenderWindow& w) const {
     // Hand-drawn-style placeholder: big title panel and simple geometric decoration.
     block(w, {{122.f, 88.f}, {780.f, 225.f}}, cream);
     text(w, "泥棒と警察", 57, {WIDTH / 2.f, 170.f}, ink);
-    text(w, "ひとつの操作、ふたつの運命。", 24, {WIDTH / 2.f, 247.f}, ink);
+    text(w, "僕たち（私たち）入れ替わってる!?", 24, {WIDTH / 2.f, 247.f}, ink);
     button(w, {{BUTTON_X, 356.f}, {BUTTON_W, 68.f}}, "スタート", true);
     button(w, {{BUTTON_X, 445.f}, {BUTTON_W, 68.f}}, "ゲーム説明");
     button(w, {{BUTTON_X, 534.f}, {BUTTON_W, 68.f}}, "設定（準備中）");
