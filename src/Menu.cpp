@@ -65,16 +65,16 @@ void Menu::button(sf::RenderWindow& w, sf::FloatRect r, const std::string& label
     block(w, r, selected ? sf::Color(252, 212, 108) : cream);
     text(w, label, 30, {r.position.x + r.size.x / 2.f, r.position.y + r.size.y / 2.f}, ink);
 }
-void Menu::drawTitle(sf::RenderWindow& w) const {
+void Menu::drawTitle(sf::RenderWindow& w, int selected) const {
     w.clear(sf::Color(179, 216, 198));
     // Hand-drawn-style placeholder: big title panel and simple geometric decoration.
     block(w, {{122.f, 88.f}, {780.f, 225.f}}, cream);
-    text(w, "泥棒と警察", 57, {WIDTH / 2.f, 170.f}, ink);
+    text(w, "Thief and Police", 57, {WIDTH / 2.f, 170.f}, ink);
     text(w, "僕たち（私たち）入れ替わってる!?", 24, {WIDTH / 2.f, 247.f}, ink);
-    button(w, {{BUTTON_X, 356.f}, {BUTTON_W, 68.f}}, "スタート", true);
-    button(w, {{BUTTON_X, 445.f}, {BUTTON_W, 68.f}}, "ゲーム説明");
-    button(w, {{BUTTON_X, 534.f}, {BUTTON_W, 68.f}}, "設定（準備中）");
-    text(w, "Enter：スタート　 Esc：終了", 18, {WIDTH / 2.f, 665.f}, ink);
+    button(w, {{BUTTON_X, 356.f}, {BUTTON_W, 68.f}}, "スタート", selected == 0);
+    button(w, {{BUTTON_X, 445.f}, {BUTTON_W, 68.f}}, "ゲーム説明", selected == 1);
+    button(w, {{BUTTON_X, 534.f}, {BUTTON_W, 68.f}}, "設定（準備中）", selected == 2);
+    text(w, "W/S・↑/↓：選択　 Enter：決定　 Esc：終了", 18, {WIDTH / 2.f, 665.f}, ink);
 }
 void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& stages, int selected,
                            const std::vector<StageProgress>& progress) const {
@@ -118,8 +118,10 @@ void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& 
             bulb.setOutlineThickness(2.f);
             w.draw(bulb);
         };
-        lamp(x + 67.f, thiefDone, sf::Color(255, 210, 69));
-        lamp(x + 113.f, policeDone, sf::Color(83, 191, 255));
+        if (i < static_cast<int>(progress.size()) && progress[i].thiefPossible)
+            lamp(x + 67.f, thiefDone, sf::Color(255, 210, 69));
+        if (i < static_cast<int>(progress.size()) && progress[i].policePossible)
+            lamp(x + 113.f, policeDone, sf::Color(83, 191, 255));
     }
     // Four L-shaped corner brackets glide toward the selected stage.
     const int localSelected = selected - start;

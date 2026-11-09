@@ -1,6 +1,7 @@
 #include "Game.hpp"
 #include "Renderer.hpp"
 #include "Menu.hpp"
+#include "Solver.hpp"
 #include <SFML/Graphics.hpp>
 #include <algorithm>
 #include <filesystem>
@@ -45,10 +46,24 @@ int main(int argc, char* argv[]) {
     std::vector<State> history;
     std::string currentFile;
     int selected = 0;
+    int titleSelected = 0;
     bool hasStage = false;
     bool endingShown = false;
     // Session-only completion flags: no save file is written.
     std::vector<StageProgress> progress(stages.size());
+    // Check each stage once at startup, using exactly the game's movement rules.
+    for (std::size_t i = 0; i < stages.size(); ++i) {
+        Board candidate;
+        State initial{};
+        if (loadStage(stages[i], candidate, initial)) {
+            const auto reachable = solveReachability(candidate, initial);
+            progress[i].thiefPossible = reachable.thief;
+            progress[i].policePossible = reachable.police;
+        } else {
+            progress[i].thiefPossible = false;
+            progress[i].policePossible = false;
+        }
+    }
     auto isUnlocked = [&](int index) {
         if (index < 0 || index >= static_cast<int>(stages.size())) return false;
         if (index == 0) return true;
@@ -92,6 +107,7 @@ int main(int argc, char* argv[]) {
                     const sf::Vector2f p = window.mapPixelToCoords(mouse->position);
                     if (screen == Screen::Title) {
                         const int action = menu.titleClick(p);
+                        if (action >= 0) titleSelected = action;
                         if (action == 0) screen = Screen::StageSelect;
                         else if (action == 1) screen = Screen::HowTo;
                     }
@@ -110,8 +126,14 @@ int main(int argc, char* argv[]) {
             if (!key) continue;
             const auto k = key->code;
             if (screen == Screen::Title) {
-                if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) screen = Screen::StageSelect;
-                else if (k == sf::Keyboard::Key::Escape) window.close();
+                if (k == sf::Keyboard::Key::W || k == sf::Keyboard::Key::Up)
+                    titleSelected = std::max(0, titleSelected - 1);
+                else if (k == sf::Keyboard::Key::S || k == sf::Keyboard::Key::Down)
+                    titleSelected = std::min(2, titleSelected + 1);
+                else if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) {
+                    if (titleSelected == 0) screen = Screen::StageSelect;
+                    else if (titleSelected == 1) screen = Screen::HowTo;
+                } else if (k == sf::Keyboard::Key::Escape) window.close();
             } else if (screen == Screen::HowTo) {
                 if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
             } else if (screen == Screen::Ending) {
@@ -163,7 +185,7 @@ int main(int argc, char* argv[]) {
                 if (screen == Screen::Playing) updateTitle(window, state);
             }
         }
-        if (screen == Screen::Title) menu.drawTitle(window);
+        if (screen == Screen::Title) menu.drawTitle(window, titleSelected);
         else if (screen == Screen::StageSelect) menu.drawStageSelect(window, stages, selected, progress);
         else if (screen == Screen::HowTo) menu.drawHowTo(window);
         else if (screen == Screen::Ending) menu.drawEnding(window);

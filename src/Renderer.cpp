@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <filesystem>
 
 constexpr float TILE = 76.f;
 constexpr float MARGIN = 30.f;
@@ -105,6 +106,7 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
     };
     for (int y = 0; y < b.height; ++y) {
         for (int x = 0; x < b.width; ++x) {
+            if (b.cell[y][x] == ' ') continue;
             sf::Vector2f pos(MARGIN + x * TILE, MARGIN + y * TILE);
             rect(window, pos, {TILE - 1.f, TILE - 1.f}, sf::Color(56, 61, 75));
             char tile = b.cell[y][x];
@@ -138,6 +140,7 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
     const float half = WALL_THICKNESS / 2.f;
     for (int y = 0; y < b.height; ++y) {
         for (int x = 0; x < b.width; ++x) {
+            if (b.cell[y][x] == ' ') continue;
             const float left = MARGIN + x * TILE;
             const float top = MARGIN + y * TILE;
             if (b.wall[y][x][UP])
@@ -146,10 +149,10 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
             if (b.wall[y][x][LEFT])
                 rect(window, {left - half, top - half},
                      {WALL_THICKNESS, TILE + WALL_THICKNESS}, wallColor);
-            if (x == b.width - 1 && b.wall[y][x][RIGHT])
+            if ((x == b.width - 1 || b.cell[y][x + 1] == ' ') && b.wall[y][x][RIGHT])
                 rect(window, {left + TILE - half, top - half},
                      {WALL_THICKNESS, TILE + WALL_THICKNESS}, wallColor);
-            if (y == b.height - 1 && b.wall[y][x][DOWN])
+            if ((y == b.height - 1 || b.cell[y + 1][x] == ' ') && b.wall[y][x][DOWN])
                 rect(window, {left - half, top + TILE - half},
                      {TILE + WALL_THICKNESS, WALL_THICKNESS}, wallColor);
         }
@@ -213,7 +216,7 @@ void drawResultOverlay(sf::RenderWindow& window, const State& s) {
 }
 
 void updateTitle(sf::RenderWindow& window, const State& s) {
-    std::string title = "泥棒と警察 | 操作中：";
+    std::string title = "Thief and Police | 操作中：";
     title += s.controlThief ? "泥棒" : "警察";
     if (s.result == Result::Win) title += " | 成功！";
     else if (s.result == Result::Lose) title += " | 失敗";
@@ -246,7 +249,7 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
             "C:/Windows/Fonts/arial.ttf"
         };
         for (const char* path : paths)
-            if (font.openFromFile(path)) return true;
+            if (std::filesystem::exists(path) && font.openFromFile(path)) return true;
         return false;
     }();
     if (!fontReady) return;
@@ -261,7 +264,7 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
     const sf::Color white(237, 242, 249);
     const sf::Color blue(86, 173, 255);
     const sf::Color red(250, 115, 120);
-    label("泥棒と警察", top + 18.f, 20, white);
+    label("Thief and Police", top + 18.f, 20, white);
     label("ステージ", top + 63.f, 12, muted);
     std::string shortName = stageName;
     const auto slash = shortName.find_last_of("/\\");

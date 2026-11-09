@@ -12,7 +12,8 @@ int opposite(int d) {
 
 bool isInside(const Board& b, int x, int y) {
     return x >= 0 && x < b.width &&
-           y >= 0 && y < b.height;
+           y >= 0 && y < b.height &&
+           b.cell[y][x] != ' ';
 }
 
 int arrowDirection(char c) {
@@ -92,7 +93,7 @@ bool loadStage(const string& filename, Board& b, State& s) {
 
     b.width = w;
     b.height = h;
-    b.cell.assign(h, vector<char>(w, '.'));
+    b.cell.assign(h, vector<char>(w, ' '));
     b.wall.assign(
         h, vector<array<bool, 4>>(w, {false, false, false, false})
     );
@@ -105,7 +106,7 @@ bool loadStage(const string& filename, Board& b, State& s) {
         const string& row = lines[2 * y];
 
         for (int x = 0; x <= w; ++x) {
-            if (row[4 * x] != '+') {
+            if (row[4 * x] != '+' && row[4 * x] != ' ') {
                 cerr << "Invalid corner in stage.\n";
                 return false;
             }
@@ -148,6 +149,7 @@ bool loadStage(const string& filename, Board& b, State& s) {
             string token = row.substr(4 * x + 1, 2);
 
             if (token[0] == 'T' || token[0] == 'P') {
+                b.cell[y][x] = '.';
                 int d = arrowDirection(token[1]);
 
                 if (d == -1) {
@@ -162,6 +164,9 @@ bool loadStage(const string& filename, Board& b, State& s) {
                     s.police = {x, y, d};
                     ++policeCount;
                 }
+            }
+            else if (token == "  " ) {
+                b.cell[y][x] = ' ';
             }
             else if (token[1] == ' ' &&
                      (token[0] == '.' ||
@@ -189,20 +194,20 @@ bool loadStage(const string& filename, Board& b, State& s) {
         return false;
     }
 
-    // Require walls around the outside of the stage.
-    for (int x = 0; x < w; ++x) {
-        if (!b.wall[0][x][UP] ||
-            !b.wall[h - 1][x][DOWN]) {
-            cerr << "Outer horizontal walls are missing.\n";
-            return false;
-        }
-    }
-
+    // Every playable cell must be separated from absent cells and the
+    // outside of the bounding rectangle by a wall.
     for (int y = 0; y < h; ++y) {
-        if (!b.wall[y][0][LEFT] ||
-            !b.wall[y][w - 1][RIGHT]) {
-            cerr << "Outer vertical walls are missing.\n";
-            return false;
+        for (int x = 0; x < w; ++x) {
+            if (b.cell[y][x] == ' ') continue;
+            for (int d = 0; d < 4; ++d) {
+                int nx = x + dx[d], ny = y + dy[d];
+                if ((nx < 0 || nx >= w || ny < 0 || ny >= h ||
+                     b.cell[ny][nx] == ' ') && !b.wall[y][x][d]) {
+                    cerr << "Missing boundary wall at (" << x << "," << y
+                         << ") direction " << d << "\n";
+                    return false;
+                }
+            }
         }
     }
 
