@@ -27,12 +27,37 @@ std::vector<std::string> findStages() {
 }
 
 int main(int argc, char* argv[]) {
+#ifdef THIEF_PUZZLE_DEV
+    constexpr bool developerMode = true;
+#else
+    constexpr bool developerMode = false;
+#endif
     auto stages = findStages();
     if (argc > 1) {
         const std::string extra = argv[1];
         if (std::find(stages.begin(), stages.end(), extra) == stages.end()) stages.insert(stages.begin(), extra);
     }
-    sf::RenderWindow window(sf::VideoMode({1024u, 720u}), "泥棒と警察");
+    sf::RenderWindow window(sf::VideoMode({1024u, 720u}),
+                            developerMode ? "泥棒と警察 [DEV]" : "泥棒と警察");
+#ifdef THIEF_PUZZLE_DEV
+    std::cout << R"(
+=== Thief & Police / Developer Mode ===
+Stage selection (select a stage with arrows or WASD):
+ F1  : mark thief objective cleared (official minimum)
+ F2  : mark police objective cleared (official minimum)
+ F3  : mark both available objectives optimal
+ F4  : mark one available objective cleared in EVERY stage
+ F5  : mark ALL available objectives cleared (non-optimal where possible)
+ F6  : mark ALL available objectives optimal
+ F7  : reset session progress and ending display history
+ F8  : preview normal ending
+ F9  : preview true ending
+ F10 : preview perfect ending
+Unavailable objectives are never marked cleared.
+All changes are session-only. The normal executable has no developer shortcuts.
+==========================================
+)";
+#endif
     const auto desktop = sf::VideoMode::getDesktopMode().size;
     window.setPosition({(static_cast<int>(desktop.x) - 1024) / 2,
                         (static_cast<int>(desktop.y) - 720) / 2});
@@ -112,7 +137,7 @@ int main(int argc, char* argv[]) {
         } else {
             screen = Screen::StageSelect;
         }
-        window.setTitle(sf::String(L"泥棒と警察"));
+        window.setTitle(sf::String(developerMode ? L"泥棒と警察 [DEV]" : L"泥棒と警察"));
     };
     auto openStage = [&](int index) {
         if (!isUnlocked(index)) return;
@@ -159,6 +184,74 @@ int main(int argc, char* argv[]) {
             const auto* key = event->getIf<sf::Event::KeyPressed>();
             if (!key) continue;
             const auto k = key->code;
+#ifdef THIEF_PUZZLE_DEV
+            // Developer shortcuts are active only in the stage selection screen.
+            // Preview endings do not alter the progression tier.
+            if (screen == Screen::StageSelect) {
+                auto markCleared = [](StageProgress& p, bool thief, bool optimal) {
+                    const bool possible = thief ? p.thiefPossible : p.policePossible;
+                    const int official = thief ? p.thiefOfficial : p.policeOfficial;
+                    if (!possible || official < 0) return;
+                    bool& cleared = thief ? p.thief : p.police;
+                    int& best = thief ? p.thiefBest : p.policeBest;
+                    cleared = true;
+                    // For non-optimal completion, use official+1 if no record exists.
+                    // Never overwrite a better existing record.
+                    const int moves = optimal ? official : official + 1;
+                    if (best < 0 || moves < best) best = moves;
+                };
+                bool handled = true;
+                switch (k) {
+                    case sf::Keyboard::Key::F1:
+                        if (!progress.empty()) markCleared(progress[selected], true, true);
+                        break;
+                    case sf::Keyboard::Key::F2:
+                        if (!progress.empty()) markCleared(progress[selected], false, true);
+                        break;
+                    case sf::Keyboard::Key::F3:
+                        if (!progress.empty()) {
+                            markCleared(progress[selected], true, true);
+                            markCleared(progress[selected], false, true);
+                        }
+                        break;
+                    case sf::Keyboard::Key::F4:
+                        for (auto& p : progress) {
+                            if (p.thiefPossible) markCleared(p, true, false);
+                            else markCleared(p, false, false);
+                        }
+                        break;
+                    case sf::Keyboard::Key::F5:
+                        for (auto& p : progress) {
+                            markCleared(p, true, false);
+                            markCleared(p, false, false);
+                        }
+                        break;
+                    case sf::Keyboard::Key::F6:
+                        for (auto& p : progress) {
+                            markCleared(p, true, true);
+                            markCleared(p, false, true);
+                        }
+                        break;
+                    case sf::Keyboard::Key::F7:
+                        for (auto& p : progress) {
+                            p.thief = p.police = false;
+                            p.thiefBest = p.policeBest = -1;
+                        }
+                        highestEndingShown = -1;
+                        selected = 0;
+                        break;
+                    case sf::Keyboard::Key::F8:
+                    case sf::Keyboard::Key::F9:
+                    case sf::Keyboard::Key::F10:
+                        currentEnding = (k == sf::Keyboard::Key::F8) ? EndingKind::Normal :
+                                        (k == sf::Keyboard::Key::F9) ? EndingKind::True : EndingKind::Perfect;
+                        screen = Screen::Ending;
+                        break;
+                    default: handled = false; break;
+                }
+                if (handled) continue;
+            }
+#endif
             if (screen == Screen::Title) {
                 if (k == sf::Keyboard::Key::W || k == sf::Keyboard::Key::Up)
                     titleSelected = std::max(0, titleSelected - 1);
