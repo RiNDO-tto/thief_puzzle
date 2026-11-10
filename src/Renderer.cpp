@@ -226,7 +226,7 @@ void updateTitle(sf::RenderWindow& window, const State& s) {
 
 // HUD: presentation only. All game rules remain in Game.cpp.
 void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
-             std::size_t moves, const std::string& stageName) {
+             std::size_t moves, const std::string& stageName, const StageProgress& progress) {
     const float x = MARGIN * 2.f + b.width * TILE + 16.f;
     const float top = 24.f;
     const float panelWidth = 268.f;
@@ -285,12 +285,40 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
     label("R  やり直す", top + 336.f, 15, white);
     label("Q  ステージ選択", top + 361.f, 15, white);
 
-    // Use the remaining space for status if the window is tall enough.
+    // Session-only best records, compared with BFS shortest paths.
+    rect(window, {x + 15.f, top + 398.f}, {238.f, 2.f}, sf::Color(83, 96, 116));
+    label("達成状況  自己ベスト / 公式最短", top + 411.f, 13, muted);
+    auto scoreLine = [&](const std::string& name, int best, int official,
+                         bool completed, bool possible, float y, sf::Color color) {
+        const bool optimal = completed && official >= 0 && best == official;
+        std::string score = possible ?
+            (best >= 0 ? std::to_string(best) : "--") + " / " +
+            (official >= 0 ? std::to_string(official) : "--") : "対象外";
+        label(name, y, 16, color);
+        label(score, y + 23.f, 17, white);
+        if (optimal) {
+            sf::Text mark(font, sf::String::fromUtf8("★ 最短達成", "★ 最短達成" + sizeof("★ 最短達成") - 1), 13);
+            mark.setPosition({x + 135.f, y});
+            mark.setFillColor(sf::Color(111, 225, 141));
+            window.draw(mark);
+        } else if (completed) {
+            sf::Text mark(font, sf::String::fromUtf8("クリア済", "クリア済" + sizeof("クリア済") - 1), 13);
+            mark.setPosition({x + 150.f, y});
+            mark.setFillColor(muted);
+            window.draw(mark);
+        }
+    };
+    scoreLine("泥棒の逃走", progress.thiefBest, progress.thiefOfficial,
+              progress.thief, progress.thiefPossible, top + 443.f, blue);
+    scoreLine("警察の逮捕", progress.policeBest, progress.policeOfficial,
+              progress.police, progress.policePossible, top + 522.f, red);
+
+    // Keep the current-state indicator at the bottom of the HUD.
     if (panelHeight >= 470.f) {
-        label("状態", top + 406.f, 12, muted);
-        if (s.result == Result::Win) label("成功", top + 428.f, 20, sf::Color(65, 210, 130));
-        else if (s.result == Result::Lose) label("失敗", top + 428.f, 20, red);
-        else if (isStuck(b, s)) label("動けません", top + 428.f, 15, red);
-        else label("プレイ中", top + 428.f, 17, white);
+        label("状態", top + 611.f, 12, muted);
+        if (s.result == Result::Win) label("成功", top + 633.f, 20, sf::Color(65, 210, 130));
+        else if (s.result == Result::Lose) label("失敗", top + 633.f, 20, red);
+        else if (isStuck(b, s)) label("動けません", top + 633.f, 15, red);
+        else label("プレイ中", top + 633.f, 17, white);
     }
 }

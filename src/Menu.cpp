@@ -85,8 +85,8 @@ void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& 
         text(w, "ステージファイルがありません", 30, {WIDTH / 2.f, 350.f}, ink);
         return;
     }
-    // 4 columns, 4 rows per page; completion and locks are session-only.
-    text(w, "左の光：泥棒の脱出　　右の光：警察の逮捕", 17,
+    // Compact per-stage progress: completion and optimality are independent.
+    text(w, "黄：泥棒  青：警察   二重丸：最短達成   数字：自己ベスト / 公式最短", 16,
          {WIDTH / 2.f, 161.f}, ink);
     const int page = std::max(0, selected) / 16;
     const int start = page * 16;
@@ -99,29 +99,42 @@ void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& 
         const bool unlocked = (i == 0) ||
             (i - 1 < static_cast<int>(progress.size()) &&
              (progress[i - 1].thief || progress[i - 1].police));
-        const bool thiefDone = i < static_cast<int>(progress.size()) && progress[i].thief;
-        const bool policeDone = i < static_cast<int>(progress.size()) && progress[i].police;
         block(w, {{x, y}, {180.f, 86.f}},
               unlocked ? cream : sf::Color(177, 182, 176));
-        text(w, unlocked ? name : name + " 鍵", 23, {x + 90.f, y + 22.f}, ink);
-        auto lamp = [&](float cx, bool lit, sf::Color on) {
-            sf::CircleShape glow(15.f);
-            glow.setOrigin({15.f, 15.f});
-            glow.setPosition({cx, y + 62.f});
-            glow.setFillColor(lit ? sf::Color(on.r, on.g, on.b, 65) : sf::Color::Transparent);
-            w.draw(glow);
-            sf::CircleShape bulb(9.f);
-            bulb.setOrigin({9.f, 9.f});
-            bulb.setPosition({cx, y + 62.f});
-            bulb.setFillColor(lit ? on : sf::Color(92, 97, 96));
-            bulb.setOutlineColor(lit ? sf::Color::White : sf::Color(65, 70, 70));
-            bulb.setOutlineThickness(2.f);
+        text(w, name, 22, {x + 90.f, y + 17.f}, unlocked ? ink : sf::Color(96, 100, 99));
+        if (i >= static_cast<int>(progress.size())) continue;
+        const auto& p = progress[i];
+        auto progressLine = [&](float cy, const char* side, bool possible, bool done,
+                                int best, int official, sf::Color color) {
+            if (!possible) return;
+            const bool optimal = done && official >= 0 && best == official;
+            // The inner lamp shows objective completion; the outer ring shows optimality.
+            const sf::Vector2f center{x + 16.f, cy};
+            if (optimal) {
+                sf::CircleShape ring(9.f);
+                ring.setOrigin({9.f, 9.f});
+                ring.setPosition(center);
+                ring.setFillColor(sf::Color::Transparent);
+                ring.setOutlineColor(color);
+                ring.setOutlineThickness(2.f);
+                w.draw(ring);
+            }
+            sf::CircleShape bulb(5.f);
+            bulb.setOrigin({5.f, 5.f});
+            bulb.setPosition(center);
+            bulb.setFillColor(done ? color : sf::Color(100, 104, 102));
+            bulb.setOutlineColor(ink);
+            bulb.setOutlineThickness(1.f);
             w.draw(bulb);
+            const std::string score = (best >= 0 ? std::to_string(best) : "--") +
+                                      " / " + (official >= 0 ? std::to_string(official) : "--");
+            text(w, std::string(side) + " " + score,
+                 13, {x + 30.f, cy - 10.f}, unlocked ? ink : sf::Color(96, 100, 99), false);
         };
-        if (i < static_cast<int>(progress.size()) && progress[i].thiefPossible)
-            lamp(x + 67.f, thiefDone, sf::Color(255, 210, 69));
-        if (i < static_cast<int>(progress.size()) && progress[i].policePossible)
-            lamp(x + 113.f, policeDone, sf::Color(83, 191, 255));
+        progressLine(y + 46.f, "泥棒", p.thiefPossible, p.thief, p.thiefBest,
+                     p.thiefOfficial, sf::Color(244, 189, 46));
+        progressLine(y + 69.f, "警察", p.policePossible, p.police, p.policeBest,
+                     p.policeOfficial, sf::Color(83, 191, 255));
     }
     // Four L-shaped corner brackets glide toward the selected stage.
     const int localSelected = selected - start;
@@ -168,12 +181,27 @@ int Menu::stageClick(sf::Vector2f p, int count) const {
     return -1;
 }
 
-void Menu::drawEnding(sf::RenderWindow& w) const {
-    w.clear(sf::Color(179, 216, 198));
-    block(w, {{110.f, 120.f}, {804.f, 440.f}}, cream);
-    text(w, "全ステージクリア！", 52, {512.f, 245.f}, ink);
-    text(w, "おめでとうございます！", 34, {512.f, 340.f}, ink);
-    text(w, "Enterキーでステージ選択へ", 23, {512.f, 465.f}, ink);
+void Menu::drawEnding(sf::RenderWindow& w, EndingKind kind) const {
+    const bool perfect = kind == EndingKind::Perfect;
+    const bool trueEnding = kind == EndingKind::True;
+    w.clear(perfect ? sf::Color(221, 198, 139) :
+            trueEnding ? sf::Color(157, 204, 199) : sf::Color(179, 216, 198));
+    block(w, {{110.f, 108.f}, {804.f, 472.f}}, cream);
+    if (perfect) {
+        text(w, "真・真・エンディング", 46, {512.f, 184.f}, ink);
+        text(w, "全ステージ・全目標・最短手数達成！", 29, {512.f, 274.f}, ink);
+        text(w, "すげーな、お前暇なのか？", 29, {512.f, 355.f}, ink);
+        text(w, "……ここまで遊んでくれて、本当にありがとう！", 21, {512.f, 416.f}, ink);
+    } else if (trueEnding) {
+        text(w, "真・エンディング", 49, {512.f, 184.f}, ink);
+        text(w, "全ステージ・両目標達成！", 33, {512.f, 280.f}, ink);
+        text(w, "次は全目標の最短手数に挑戦してみよう！", 23, {512.f, 389.f}, ink);
+    } else {
+        text(w, "エンディング", 51, {512.f, 184.f}, ink);
+        text(w, "全ステージクリア！", 40, {512.f, 280.f}, ink);
+        text(w, "もう一方の目標達成もがんばれ！", 25, {512.f, 389.f}, ink);
+    }
+    text(w, "Enterキーでステージ選択へ", 22, {512.f, 505.f}, ink);
 }
 void Menu::drawPlayingResult(sf::RenderWindow& w, const State& s) const {
     if (s.result == Result::Playing) return;

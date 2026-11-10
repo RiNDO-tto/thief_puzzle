@@ -5,6 +5,7 @@
 #include <vector>
 
 enum class Screen { Title, StageSelect, Playing, Ending, HowTo };
+enum class EndingKind { Normal, True, Perfect };
 
 struct StageProgress {
     bool thief = false;
@@ -20,7 +21,7 @@ struct StageProgress {
 class Menu {
 public:
     Menu();
-    void drawEnding(sf::RenderWindow& window) const;
+    void drawEnding(sf::RenderWindow& window, EndingKind kind) const;
     void drawPlayingResult(sf::RenderWindow& window, const State& state) const;
     void drawTitle(sf::RenderWindow& window, int selected) const;
     void drawHowTo(sf::RenderWindow& window) const;

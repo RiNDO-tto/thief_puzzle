@@ -48,7 +48,8 @@ int main(int argc, char* argv[]) {
     int selected = 0;
     int titleSelected = 0;
     bool hasStage = false;
-    bool endingShown = false;
+    int highestEndingShown = -1; // -1: none, 0: normal, 1: true, 2: perfect
+    EndingKind currentEnding = EndingKind::Normal;
     // Session-only completion flags: no save file is written.
     std::vector<StageProgress> progress(stages.size());
     // Check each stage once at startup, using exactly the game's movement rules.
@@ -77,9 +78,40 @@ int main(int argc, char* argv[]) {
         return !progress.empty() && std::all_of(progress.begin(), progress.end(),
             [](const StageProgress& p) { return p.thief || p.police; });
     };
+    // Objectives with no BFS solution are not required for higher endings.
+    // A stage with no solvable objective cannot count as fully completed.
+    auto allBothCleared = [&]() {
+        return !progress.empty() && std::all_of(progress.begin(), progress.end(),
+            [](const StageProgress& p) {
+                const bool hasObjective = p.thiefPossible || p.policePossible;
+                return hasObjective &&
+                       (!p.thiefPossible || p.thief) &&
+                       (!p.policePossible || p.police);
+            });
+    };
+    auto allOptimal = [&]() {
+        return !progress.empty() && std::all_of(progress.begin(), progress.end(),
+            [](const StageProgress& p) {
+                const bool hasObjective = p.thiefPossible || p.policePossible;
+                return hasObjective &&
+                       (!p.thiefPossible || (p.thiefBest >= 0 && p.thiefBest == p.thiefOfficial)) &&
+                       (!p.policePossible || (p.policeBest >= 0 && p.policeBest == p.policeOfficial));
+            });
+    };
     auto returnToSelect = [&]() {
-        screen = (!endingShown && allCleared()) ? Screen::Ending : Screen::StageSelect;
-        if (screen == Screen::Ending) endingShown = true;
+        // Show only an ending that exceeds the highest tier shown this session.
+        // If multiple tiers become eligible at once, show only the highest.
+        int tier = -1;
+        if (allOptimal()) tier = 2;
+        else if (allBothCleared()) tier = 1;
+        else if (allCleared()) tier = 0;
+        if (tier > highestEndingShown) {
+            highestEndingShown = tier;
+            currentEnding = static_cast<EndingKind>(tier);
+            screen = Screen::Ending;
+        } else {
+            screen = Screen::StageSelect;
+        }
         window.setTitle(sf::String(L"泥棒と警察"));
     };
     auto openStage = [&](int index) {
@@ -197,7 +229,7 @@ int main(int argc, char* argv[]) {
         if (screen == Screen::Title) menu.drawTitle(window, titleSelected);
         else if (screen == Screen::StageSelect) menu.drawStageSelect(window, stages, selected, progress);
         else if (screen == Screen::HowTo) menu.drawHowTo(window);
-        else if (screen == Screen::Ending) menu.drawEnding(window);
+        else if (screen == Screen::Ending) menu.drawEnding(window, currentEnding);
         else {
             window.clear(sf::Color(29, 32, 42));
             // 70% for the board, 30% for the instructions.
@@ -215,7 +247,7 @@ int main(int argc, char* argv[]) {
             sf::View hudView(sf::FloatRect({hudX - 4.f, 0.f}, {300.f, 720.f}));
             hudView.setViewport(sf::FloatRect({.7f, 0.f}, {.3f, 1.f}));
             window.setView(hudView);
-            drawHud(window, board, state, history.size(), currentFile);
+            drawHud(window, board, state, history.size(), currentFile, progress[selected]);
             window.setView(oldView);
             menu.drawPlayingResult(window, state);
         }
