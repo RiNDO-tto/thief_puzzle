@@ -73,13 +73,13 @@ void Menu::drawTitle(sf::RenderWindow& w, int selected) const {
     text(w, "僕たち（私たち）入れ替わってる!?", 24, {WIDTH / 2.f, 247.f}, ink);
     button(w, {{BUTTON_X, 356.f}, {BUTTON_W, 68.f}}, "スタート", selected == 0);
     button(w, {{BUTTON_X, 445.f}, {BUTTON_W, 68.f}}, "ゲーム説明", selected == 1);
-    button(w, {{BUTTON_X, 534.f}, {BUTTON_W, 68.f}}, "設定（準備中）", selected == 2);
+    button(w, {{BUTTON_X, 534.f}, {BUTTON_W, 68.f}}, "設定", selected == 2);
     text(w, "W/S・↑/↓：選択　 Enter：決定　 Esc：終了", 18, {WIDTH / 2.f, 665.f}, ink);
 }
 void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& stages, int selected,
-                           const std::vector<StageProgress>& progress) const {
+                           const std::vector<StageProgress>& progress, int world, int worldStart, int worldEnd) const {
     w.clear(sf::Color(179, 216, 198));
-    text(w, "ステージ選択", 48, {WIDTH / 2.f, 78.f}, ink);
+    text(w, "ワールド " + std::to_string(world) + " / ステージ選択", 42, {WIDTH / 2.f, 78.f}, ink);
     text(w, "矢印・WASD：選択　 Enter：開始　 Esc：戻る", 18, {WIDTH / 2.f, 135.f}, ink);
     if (stages.empty()) {
         text(w, "ステージファイルがありません", 30, {WIDTH / 2.f, 350.f}, ink);
@@ -88,14 +88,14 @@ void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& 
     // Compact per-stage progress: completion and optimality are independent.
     text(w, "黄：泥棒  青：警察   二重丸：最短達成   数字：自己ベスト / 公式最短", 16,
          {WIDTH / 2.f, 161.f}, ink);
-    const int page = std::max(0, selected) / 16;
-    const int start = page * 16;
-    const int end = std::min(static_cast<int>(stages.size()), start + 16);
+    const int page = std::max(0, selected - worldStart) / 16;
+    const int start = worldStart + page * 16;
+    const int end = std::min(worldEnd, start + 16);
     for (int i = start; i < end; ++i) {
         const int local = i - start;
         const float x = 105.f + (local % 4) * 210.f;
         const float y = 190.f + (local / 4) * 103.f;
-        const std::string name = "1-" + std::to_string(i + 1);
+        const std::string name = std::to_string(world) + "-" + std::to_string(i - worldStart + 1);
         const bool unlocked = (i == 0) ||
             (i - 1 < static_cast<int>(progress.size()) &&
              (progress[i - 1].thief || progress[i - 1].police));
@@ -161,7 +161,7 @@ void Menu::drawStageSelect(sf::RenderWindow& w, const std::vector<std::string>& 
             rectCorner(w, px, py, side, vertical, arm, thick, marker);
         }
     }
-    text(w, "ページ " + std::to_string(page + 1) + " / " + std::to_string((stages.size() + 15) / 16),
+    text(w, "ページ " + std::to_string(page + 1) + " / " + std::to_string((worldEnd - worldStart + 15) / 16),
          20, {WIDTH / 2.f, 654.f}, ink);
 }
 int Menu::titleClick(sf::Vector2f p) const {
@@ -203,15 +203,16 @@ void Menu::drawEnding(sf::RenderWindow& w, EndingKind kind) const {
     }
     text(w, "Enterキーでステージ選択へ", 22, {512.f, 505.f}, ink);
 }
-void Menu::drawPlayingResult(sf::RenderWindow& w, const State& s) const {
+void Menu::drawPlayingResult(sf::RenderWindow& w, const State& s, const Controls& controls, bool nextUnlocked) const {
     if (s.result == Result::Playing) return;
-    block(w, {{105.f, 278.f}, {610.f, 166.f}}, sf::Color(32, 40, 52));
+    block(w, {{75.f, 260.f}, {680.f, 200.f}}, sf::Color(32, 40, 52));
     text(w, s.result == Result::Win ? "目標達成！" : "失敗！", 48,
          {410.f, 345.f}, s.result == Result::Win ? sf::Color(126, 234, 157) : sf::Color(255, 141, 143));
-    text(w, "Q：ステージ選択へ　 R：やり直す", 19, {410.f, 402.f}, sf::Color::White);
+    text(w, controls.label(Action::Back) + "：ステージ選択  " + controls.label(Action::Restart) + "：やり直し", 18, {410.f, 388.f}, sf::Color::White);
+    text(w, controls.label(Action::Undo) + "：1手戻す  " + controls.label(Action::Next) + (nextUnlocked ? "：次のステージ" : "：次は未解禁"), 18, {410.f, 425.f}, sf::Color::White);
 }
 
-void Menu::drawHowTo(sf::RenderWindow& w) const {
+void Menu::drawHowTo(sf::RenderWindow& w, const Controls& controls) const {
     w.clear(sf::Color(179, 216, 198));
     text(w, "ゲーム説明", 46, {512.f, 65.f}, ink);
     block(w, {{72.f, 115.f}, {880.f, 520.f}}, cream);
@@ -226,7 +227,75 @@ void Menu::drawHowTo(sf::RenderWindow& w) const {
                               "壁があれば移動できません。"}, 268.f);
     section("移動制約とギミック", {"操作中のキャラクターは後退できず、壁の方を向けません。",
                               "スイッチで操作対象が交代し、誰かがトゲに触れると失敗です。（キャラが〇んだら悲しいので）"}, 403.f);
-    text(w, "WASD：移動　 Z：1手戻す　 R：やり直す　 Q：ステージ選択", 17,
+    text(w, controls.movement() + "：移動  " + controls.label(Action::Undo) + "：戻す  " + controls.label(Action::Restart) + "：やり直す", 17,
          {512.f, 578.f}, ink);
+    text(w, controls.label(Action::Back) + "：ステージ選択  " + controls.label(Action::Next) + "：次のステージ", 17, {512.f, 611.f}, ink);
     text(w, "Esc：タイトルへ戻る", 20, {512.f, 670.f}, ink);
+}
+
+namespace {
+const std::array<std::string, 5> worldNames = {
+    "まずは慣れよう", "少し発展", "片方はeasy", "スイッチ邪魔！", "できたら自慢してヨシ"
+};
+}
+void Menu::drawWorldSelect(sf::RenderWindow& w, int selectedWorld,
+                           const std::array<std::array<bool, 3>, 5>& status) const {
+    w.clear(sf::Color(179, 216, 198));
+    text(w, "ワールド選択", 46, {512.f, 62.f}, ink);
+    text(w, "↑↓：選択  Enter：決定  Esc：タイトル", 18, {512.f, 113.f}, ink);
+    text(w, "ランプ：全ステージ解禁 / 全目標達成 / 全目標最短", 17, {512.f, 149.f}, ink);
+    for (int i=0;i<5;++i) {
+        const float y=177.f+i*95.f;
+        block(w, {{142.f,y},{740.f,80.f}}, i==selectedWorld ? sf::Color(252,212,108) : cream);
+        text(w, "WORLD " + std::to_string(i+1) + "  " + worldNames[i], 25, {164.f,y+24.f}, ink, false);
+        for (int j=0;j<3;++j) {
+            sf::CircleShape lamp(10.f);
+            lamp.setPosition({733.f+j*43.f,y+30.f});
+            lamp.setFillColor(status[i][j] ? (j==0 ? sf::Color(117,177,102) : j==1 ? sf::Color(82,184,238) : sf::Color(245,186,50)) : sf::Color(125,130,125));
+            lamp.setOutlineThickness(2.f); lamp.setOutlineColor(ink); w.draw(lamp);
+        }
+    }
+}
+int Menu::worldClick(sf::Vector2f p) const {
+    if (p.x<142.f || p.x>882.f) return -1;
+    for (int i=0;i<5;++i) if (p.y>=177.f+i*95.f && p.y<=257.f+i*95.f) return i;
+    return -1;
+}
+void Menu::drawSettings(sf::RenderWindow& w, int selected) const {
+    w.clear(sf::Color(179,216,198));
+    text(w,"設定",48,{512.f,95.f},ink);
+    button(w,{{250.f,210.f},{524.f,76.f}},"キー割り当て",selected==0);
+    button(w,{{250.f,318.f},{524.f,76.f}},"画面表示",selected==1);
+    block(w,{{250.f,426.f},{524.f,76.f}},sf::Color(177,182,176));
+    text(w,"BGM・効果音（準備中）",25,{512.f,464.f},sf::Color(95,100,99));
+    text(w,"↑↓：選択  Enter：決定  Esc：戻る",19,{512.f,620.f},ink);
+    text(w,"設定は再起動時に初期化されます",17,{512.f,665.f},ink);
+}
+void Menu::drawKeySettings(sf::RenderWindow& w, const Controls& controls, int selected,
+                           bool capturing, const std::string& message) const {
+    w.clear(sf::Color(179,216,198));
+    text(w,"キー割り当て",44,{512.f,64.f},ink);
+    const std::array<std::string,8> names={"上へ","左へ","下へ","右へ","1手戻す","やり直す","ステージ選択へ","次のステージへ"};
+    for(int i=0;i<9;++i){
+        const float y=112.f+i*54.f;
+        block(w,{{190.f,y},{644.f,46.f}},i==selected ? sf::Color(252,212,108):cream);
+        if(i<8){
+            text(w,names[i],21,{218.f,y+23.f},ink,false);
+            text(w,(capturing&&selected==i) ? "キー入力待ち..." : controls.label(static_cast<Action>(i)),20,{730.f,y+23.f},ink);
+        }else text(w,"初期設定に戻す",21,{512.f,y+23.f},ink);
+    }
+    text(w,message.empty() ? "↑↓：選択  Enter：変更  Esc：戻る" : message,18,{512.f,660.f},ink);
+}
+void Menu::drawDisplaySettings(sf::RenderWindow& w, int selected, bool fullscreen,
+                               int resolution, bool vsync) const {
+    w.clear(sf::Color(179,216,198));
+    text(w,"画面表示",46,{512.f,90.f},ink);
+    const std::array<std::string,3> labels={
+        std::string("表示モード：")+(fullscreen ? "フルスクリーン":"ウィンドウ"),
+        std::string("ウィンドウサイズ：")+(resolution==0?"1024 x 720":resolution==1?"1280 x 800":"800 x 600"),
+        std::string("垂直同期：")+(vsync?"オン":"オフ")
+    };
+    for(int i=0;i<3;++i) button(w,{{175.f,202.f+i*108.f},{674.f,76.f}},labels[i],i==selected);
+    text(w,"←→ / Enter：変更  Esc：戻る",19,{512.f,615.f},ink);
+    text(w,"画面比率を保って表示します。サイズはウィンドウ時のみ変更可能。",16,{512.f,666.f},ink);
 }

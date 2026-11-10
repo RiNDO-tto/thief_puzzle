@@ -216,17 +216,20 @@ void drawResultOverlay(sf::RenderWindow& window, const State& s) {
 }
 
 void updateTitle(sf::RenderWindow& window, const State& s) {
-    std::string title = "Thief and Police | 操作中：";
-    title += s.controlThief ? "泥棒" : "警察";
-    if (s.result == Result::Win) title += " | 成功！";
-    else if (s.result == Result::Lose) title += " | 失敗";
-    if (!s.message.empty()) title += " | " + s.message;
-    window.setTitle(sf::String::fromUtf8(title.begin(), title.end()));
+    // Use ASCII for the OS-managed title bar; the game UI remains Japanese.
+    std::string title = "Thief and Police | Playing as: ";
+    title += s.controlThief ? "Thief" : "Police";
+    if (s.result == Result::Win) title += " | Win!";
+    else if (s.result == Result::Lose) title += " | Lose";
+#ifdef THIEF_PUZZLE_DEV
+    title += " [DEV]";
+#endif
+    window.setTitle(sf::String(title));
 }
 
 // HUD: presentation only. All game rules remain in Game.cpp.
 void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
-             std::size_t moves, const std::string& stageName, const StageProgress& progress) {
+             std::size_t moves, const std::string& stageName, const StageProgress& progress, const Controls& controls, bool nextUnlocked) {
     const float x = MARGIN * 2.f + b.width * TILE + 16.f;
     const float top = 24.f;
     const float panelWidth = 268.f;
@@ -280,10 +283,11 @@ void drawHud(sf::RenderWindow& window, const Board& b, const State& s,
     label(std::to_string(moves), top + 211.f, 26, white);
 
     label("操作方法", top + 265.f, 12, muted);
-    label("WASD  移動", top + 286.f, 15, white);
-    label("Z  1手戻す", top + 311.f, 15, white);
-    label("R  やり直す", top + 336.f, 15, white);
-    label("Q  ステージ選択", top + 361.f, 15, white);
+    label(controls.movement() + "  移動", top + 286.f, 14, white);
+    label(controls.label(Action::Undo) + "  1手戻す", top + 311.f, 15, white);
+    label(controls.label(Action::Restart) + "  やり直す", top + 336.f, 15, white);
+    label(controls.label(Action::Back) + "  ステージ選択", top + 361.f, 15, white);
+    label(controls.label(Action::Next) + (nextUnlocked ? "  次のステージ" : "  次（未解禁）"), top + 381.f, 14, nextUnlocked ? white : muted);
 
     // Session-only best records, compared with BFS shortest paths.
     rect(window, {x + 15.f, top + 398.f}, {238.f, 2.f}, sf::Color(83, 96, 116));

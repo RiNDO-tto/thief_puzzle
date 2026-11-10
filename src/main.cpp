@@ -4,6 +4,9 @@
 #include "Solver.hpp"
 #include <SFML/Graphics.hpp>
 #include <algorithm>
+#include <array>
+#include <regex>
+#include <tuple>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -12,17 +15,21 @@
 
 namespace fs = std::filesystem;
 
-std::vector<std::string> findStages() {
-    std::vector<std::string> result;
+struct StageEntry { std::string path; int world; int number; };
+std::vector<StageEntry> findStages() {
+    std::vector<StageEntry> result;
     if (!fs::exists("stages") || !fs::is_directory("stages")) return result;
+    const std::regex pattern(R"(^stage([1-5])-([1-9][0-9]*)\.txt$)");
     for (const auto& entry : fs::directory_iterator("stages")) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".txt") continue;
-        const auto name = entry.path().filename().string();
-        // Ignore stageXX_fixed.txt and other experimental stage files.
-        if (name.rfind("stage", 0) != 0 || name.find("fixed") != std::string::npos) continue;
-        result.push_back(entry.path().string());
+        if (!entry.is_regular_file()) continue;
+        std::smatch match;
+        const std::string name = entry.path().filename().string();
+        if (std::regex_match(name, match, pattern))
+            result.push_back({entry.path().string(), std::stoi(match[1]), std::stoi(match[2])});
     }
-    std::sort(result.begin(), result.end());
+    std::sort(result.begin(), result.end(), [](const StageEntry& a, const StageEntry& b) {
+        return std::tie(a.world, a.number) < std::tie(b.world, b.number);
+    });
     return result;
 }
 
@@ -32,13 +39,18 @@ int main(int argc, char* argv[]) {
 #else
     constexpr bool developerMode = false;
 #endif
-    auto stages = findStages();
-    if (argc > 1) {
-        const std::string extra = argv[1];
-        if (std::find(stages.begin(), stages.end(), extra) == stages.end()) stages.insert(stages.begin(), extra);
+    auto entries = findStages();
+    std::vector<std::string> stages;
+    for (const auto& entry : entries) stages.push_back(entry.path);
+    std::array<int, 6> worldStarts{};
+    for (int world = 1; world <= 5; ++world) {
+        worldStarts[world - 1] = static_cast<int>(std::count_if(entries.begin(), entries.end(),
+            [world](const StageEntry& e) { return e.world < world; }));
     }
+    worldStarts[5] = static_cast<int>(entries.size());
+    (void)argc; (void)argv; // Only numbered world stage files participate in progression.
     sf::RenderWindow window(sf::VideoMode({1024u, 720u}),
-                            developerMode ? "泥棒と警察 [DEV]" : "泥棒と警察");
+                            sf::String(developerMode ? std::u32string(U"Thief and Police [DEV]") : std::u32string(U"Thief and Police")));
 #ifdef THIEF_PUZZLE_DEV
     std::cout << R"(
 === Thief & Police / Developer Mode ===
@@ -62,6 +74,29 @@ All changes are session-only. The normal executable has no developer shortcuts.
     window.setPosition({(static_cast<int>(desktop.x) - 1024) / 2,
                         (static_cast<int>(desktop.y) - 720) / 2});
     window.setFramerateLimit(60);
+    Controls controls;
+    bool fullscreen = false;
+    bool vsync = false;
+    int resolution = 0;
+    const std::array<sf::Vector2u, 3> windowSizes = {{{1024u,720u},{1280u,800u},{800u,600u}}};
+    // Recenter after recreating the OS window (fullscreen/resolution changes).
+    auto centerWindow = [&]() {
+        if (fullscreen) return;
+        const sf::Vector2u screen = sf::VideoMode::getDesktopMode().size;
+        const sf::Vector2u size = window.getSize();
+        window.setPosition({(static_cast<int>(screen.x) - static_cast<int>(size.x)) / 2,
+                            (static_cast<int>(screen.y) - static_cast<int>(size.y)) / 2});
+    };
+    auto applyDisplay = [&]() {
+        const sf::VideoMode mode = fullscreen ? sf::VideoMode::getDesktopMode() : sf::VideoMode(windowSizes[resolution]);
+        window.create(mode, sf::String(developerMode ? std::u32string(U"Thief and Police [DEV]") : std::u32string(U"Thief and Police")),
+                      fullscreen ? sf::State::Fullscreen : sf::State::Windowed);
+        window.setKeyRepeatEnabled(false);
+        window.setFramerateLimit(60);
+        window.setVerticalSyncEnabled(vsync);
+        window.setView(sf::View(sf::FloatRect({0.f,0.f},{1024.f,720.f})));
+        centerWindow();
+    };
     window.setKeyRepeatEnabled(false);
     Menu menu;
     Screen screen = Screen::Title;
@@ -72,6 +107,19 @@ All changes are session-only. The normal executable has no developer shortcuts.
     std::string currentFile;
     int selected = 0;
     int titleSelected = 0;
+    int selectedWorld = 0;
+    int settingsSelected = 0;
+    int keySelected = 0;
+    int displaySelected = 0;
+    bool capturingKey = false;
+    std::string keyMessage;
+    auto currentWorldStart = [&]() { return worldStarts[selectedWorld]; };
+    auto currentWorldEnd = [&]() { return worldStarts[selectedWorld + 1]; };
+    auto enterWorld = [&](int w) {
+        selectedWorld = w;
+        selected = worldStarts[w];
+        screen = Screen::StageSelect;
+    };
     bool hasStage = false;
     int highestEndingShown = -1; // -1: none, 0: normal, 1: true, 2: perfect
     EndingKind currentEnding = EndingKind::Normal;
@@ -137,7 +185,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
         } else {
             screen = Screen::StageSelect;
         }
-        window.setTitle(sf::String(developerMode ? L"泥棒と警察 [DEV]" : L"泥棒と警察"));
+        window.setTitle(sf::String(developerMode ? std::u32string(U"Thief and Police [DEV]") : std::u32string(U"Thief and Police")));
     };
     auto openStage = [&](int index) {
         if (!isUnlocked(index)) return;
@@ -153,6 +201,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
         history.clear();
         currentFile = stages[index];
         selected = index;
+        selectedWorld = entries[index].world - 1;
         hasStage = true;
         screen = Screen::Playing;
         updateTitle(window, state);
@@ -161,20 +210,56 @@ All changes are session-only. The normal executable has no developer shortcuts.
     while (window.isOpen()) {
         while (const std::optional event = window.pollEvent()) {
             if (event->is<sf::Event::Closed>()) { window.close(); continue; }
+            // Keep the window centered when the user manually resizes it.
+            if (event->is<sf::Event::Resized>()) {
+                centerWindow();
+            }
             if (const auto* mouse = event->getIf<sf::Event::MouseButtonPressed>()) {
                 if (mouse->button == sf::Mouse::Button::Left) {
                     const sf::Vector2f p = window.mapPixelToCoords(mouse->position);
                     if (screen == Screen::Title) {
                         const int action = menu.titleClick(p);
                         if (action >= 0) titleSelected = action;
-                        if (action == 0) screen = Screen::StageSelect;
+                        if (action == 0) screen = Screen::WorldSelect;
                         else if (action == 1) screen = Screen::HowTo;
+                        else if (action == 2) screen = Screen::Settings;
+                    }
+                    else if (screen == Screen::WorldSelect) {
+                        const int clicked = menu.worldClick(p);
+                        if (clicked >= 0) enterWorld(clicked);
+                    }
+                    else if (screen == Screen::Settings) {
+                        if (p.x>=250.f && p.x<=774.f) {
+                            if (p.y>=210.f && p.y<=286.f) { settingsSelected=0; screen=Screen::KeySettings; }
+                            else if (p.y>=318.f && p.y<=394.f) { settingsSelected=1; screen=Screen::DisplaySettings; }
+                        }
+                    }
+                    else if (screen == Screen::KeySettings && !capturingKey) {
+                        if (p.x>=190.f && p.x<=834.f && p.y>=112.f && p.y<112.f+9*54.f) {
+                            int clicked = static_cast<int>((p.y-112.f)/54.f);
+                            if (p.y<=112.f+clicked*54.f+46.f) {
+                                keySelected=clicked;
+                                if (keySelected==8) { controls=Controls{}; keyMessage="初期設定に戻しました"; }
+                                else { capturingKey=true; keyMessage="変更するキーを押してください（Escでキャンセル）"; }
+                            }
+                        }
+                    }
+                    else if (screen == Screen::DisplaySettings) {
+                        if (p.x>=175.f && p.x<=849.f && p.y>=202.f && p.y<202.f+3*108.f) {
+                            int clicked = static_cast<int>((p.y-202.f)/108.f);
+                            if (p.y<=202.f+clicked*108.f+76.f) {
+                                displaySelected=clicked;
+                                if (clicked==0) { fullscreen=!fullscreen; applyDisplay(); }
+                                else if (clicked==1 && !fullscreen) { resolution=(resolution+1)%3; applyDisplay(); }
+                                else if (clicked==2) { vsync=!vsync; window.setVerticalSyncEnabled(vsync); }
+                            }
+                        }
                     }
                     else if (screen == Screen::StageSelect) {
-                        const int page = selected / 16;
-                        const int clicked = menu.stageClick(p, std::min(16, static_cast<int>(stages.size()) - page * 16));
+                        const int page = (selected - currentWorldStart()) / 16;
+                        const int clicked = menu.stageClick(p, std::min(16, currentWorldEnd() - currentWorldStart() - page * 16));
                         if (clicked >= 0) {
-                            const int index = page * 16 + clicked;
+                            const int index = currentWorldStart() + page * 16 + clicked;
                             if (isUnlocked(index)) { selected = index; openStage(index); }
                         }
                     }
@@ -184,6 +269,16 @@ All changes are session-only. The normal executable has no developer shortcuts.
             const auto* key = event->getIf<sf::Event::KeyPressed>();
             if (!key) continue;
             const auto k = key->code;
+            if (screen == Screen::KeySettings && capturingKey) {
+                if (k == sf::Keyboard::Key::Escape) {
+                    capturingKey = false; keyMessage = "変更をキャンセルしました";
+                } else {
+                    const bool ok = controls.assign(static_cast<Action>(keySelected), k);
+                    keyMessage = ok ? "キーを変更しました" : "使用不可、または他の操作と重複しています";
+                    if (ok) capturingKey = false;
+                }
+                continue;
+            }
 #ifdef THIEF_PUZZLE_DEV
             // Developer shortcuts are active only in the stage selection screen.
             // Preview endings do not alter the progression tier.
@@ -238,6 +333,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
                             p.thiefBest = p.policeBest = -1;
                         }
                         highestEndingShown = -1;
+                        selectedWorld = 0;
                         selected = 0;
                         break;
                     case sf::Keyboard::Key::F8:
@@ -258,45 +354,70 @@ All changes are session-only. The normal executable has no developer shortcuts.
                 else if (k == sf::Keyboard::Key::S || k == sf::Keyboard::Key::Down)
                     titleSelected = std::min(2, titleSelected + 1);
                 else if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) {
-                    if (titleSelected == 0) screen = Screen::StageSelect;
+                    if (titleSelected == 0) screen = Screen::WorldSelect;
                     else if (titleSelected == 1) screen = Screen::HowTo;
+                    else if (titleSelected == 2) screen = Screen::Settings;
                 } else if (k == sf::Keyboard::Key::Escape) window.close();
+            } else if (screen == Screen::WorldSelect) {
+                if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
+                else if (k == sf::Keyboard::Key::Up || k == sf::Keyboard::Key::W) selectedWorld = std::max(0, selectedWorld - 1);
+                else if (k == sf::Keyboard::Key::Down || k == sf::Keyboard::Key::S) selectedWorld = std::min(4, selectedWorld + 1);
+                else if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) enterWorld(selectedWorld);
+            } else if (screen == Screen::Settings) {
+                if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
+                else if (k == sf::Keyboard::Key::Up || k == sf::Keyboard::Key::W) settingsSelected = std::max(0, settingsSelected - 1);
+                else if (k == sf::Keyboard::Key::Down || k == sf::Keyboard::Key::S) settingsSelected = std::min(1, settingsSelected + 1);
+                else if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space)
+                    screen = settingsSelected == 0 ? Screen::KeySettings : Screen::DisplaySettings;
+            } else if (screen == Screen::KeySettings) {
+                if (k == sf::Keyboard::Key::Escape) { screen = Screen::Settings; keyMessage.clear(); }
+                else if (k == sf::Keyboard::Key::Up) keySelected = std::max(0, keySelected - 1);
+                else if (k == sf::Keyboard::Key::Down) keySelected = std::min(8, keySelected + 1);
+                else if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) {
+                    if (keySelected == 8) { controls = Controls{}; keyMessage = "初期設定に戻しました"; }
+                    else { capturingKey = true; keyMessage = "変更するキーを押してください（Escでキャンセル）"; }
+                }
+            } else if (screen == Screen::DisplaySettings) {
+                if (k == sf::Keyboard::Key::Escape) screen = Screen::Settings;
+                else if (k == sf::Keyboard::Key::Up) displaySelected = std::max(0, displaySelected - 1);
+                else if (k == sf::Keyboard::Key::Down) displaySelected = std::min(2, displaySelected + 1);
+                else if (k == sf::Keyboard::Key::Left || k == sf::Keyboard::Key::Right || k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) {
+                    if (displaySelected == 0) { fullscreen = !fullscreen; applyDisplay(); }
+                    else if (displaySelected == 1 && !fullscreen) { resolution = (resolution + (k == sf::Keyboard::Key::Left ? 2 : 1)) % 3; applyDisplay(); }
+                    else if (displaySelected == 2) { vsync = !vsync; window.setVerticalSyncEnabled(vsync); }
+                }
             } else if (screen == Screen::HowTo) {
                 if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
             } else if (screen == Screen::Ending) {
                 if (k == sf::Keyboard::Key::Enter) screen = Screen::StageSelect;
             } else if (screen == Screen::StageSelect) {
-                if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
-                else if (!stages.empty()) {
-                    if (k == sf::Keyboard::Key::Left || k == sf::Keyboard::Key::A) selected = std::max(0, selected - 1);
-                    else if (k == sf::Keyboard::Key::Right || k == sf::Keyboard::Key::D) selected = std::min(static_cast<int>(stages.size()) - 1, selected + 1);
-                    else if (k == sf::Keyboard::Key::Up || k == sf::Keyboard::Key::W) selected = std::max(0, selected - 4);
-                    else if (k == sf::Keyboard::Key::Down || k == sf::Keyboard::Key::S) selected = std::min(static_cast<int>(stages.size()) - 1, selected + 4);
+                if (k == sf::Keyboard::Key::Escape) screen = Screen::WorldSelect;
+                else if (currentWorldStart() < currentWorldEnd()) {
+                    if (k == sf::Keyboard::Key::Left || k == sf::Keyboard::Key::A) selected = std::max(currentWorldStart(), selected - 1);
+                    else if (k == sf::Keyboard::Key::Right || k == sf::Keyboard::Key::D) selected = std::min(currentWorldEnd() - 1, selected + 1);
+                    else if (k == sf::Keyboard::Key::Up || k == sf::Keyboard::Key::W) selected = std::max(currentWorldStart(), selected - 4);
+                    else if (k == sf::Keyboard::Key::Down || k == sf::Keyboard::Key::S) selected = std::min(currentWorldEnd() - 1, selected + 4);
                     else if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) openStage(selected);
                 }
             } else if (screen == Screen::Playing && hasStage) {
                 int direction = -1;
-                switch (k) {
-                    case sf::Keyboard::Key::W: direction = UP; break;
-                    case sf::Keyboard::Key::D: direction = RIGHT; break;
-                    case sf::Keyboard::Key::S: direction = DOWN; break;
-                    case sf::Keyboard::Key::A: direction = LEFT; break;
-                    case sf::Keyboard::Key::Q:
-                        returnToSelect();
-                        break;
-                    case sf::Keyboard::Key::R:
-                        state = initialState;
-                        history.clear();
-                        state.message = "ステージをやり直しました！";
-                        break;
-                    case sf::Keyboard::Key::Z:
-                        if (!history.empty()) {
-                            state = history.back();
-                            history.pop_back();
-                            state.message = "1手戻しました。";
-                        } else state.message = "戻せる手がありません！";
-                        break;
-                    default: break;
+                if (controls.matches(Action::Up, k)) direction = UP;
+                else if (controls.matches(Action::Right, k)) direction = RIGHT;
+                else if (controls.matches(Action::Down, k)) direction = DOWN;
+                else if (controls.matches(Action::Left, k)) direction = LEFT;
+                else if (controls.matches(Action::Back, k)) returnToSelect();
+                else if (controls.matches(Action::Next, k)) {
+                    if (selected + 1 < static_cast<int>(stages.size()) && isUnlocked(selected + 1))
+                        openStage(selected + 1);
+                } else if (controls.matches(Action::Restart, k)) {
+                    state = initialState;
+                    history.clear();
+                    state.message = "ステージをやり直しました！";
+                } else if (controls.matches(Action::Undo, k)) {
+                    if (!history.empty()) {
+                        state = history.back(); history.pop_back();
+                        state.message = "1手戻しました。";
+                    } else state.message = "戻せる手がありません！";
                 }
                 if (direction != -1) {
                     State previous = state;
@@ -319,9 +440,27 @@ All changes are session-only. The normal executable has no developer shortcuts.
                 if (screen == Screen::Playing) updateTitle(window, state);
             }
         }
+        std::array<std::array<bool, 3>, 5> worldStatus{};
+        for (int w=0;w<5;++w) {
+            const int a=worldStarts[w], b=worldStarts[w+1];
+            if (a==b) continue;
+            worldStatus[w][0] = std::all_of(entries.begin()+a,entries.begin()+b,[&](const StageEntry& e){
+                const int idx=static_cast<int>(&e - entries.data()); return isUnlocked(idx);
+            });
+            worldStatus[w][1] = std::all_of(progress.begin()+a,progress.begin()+b,[](const StageProgress& p){
+                return (p.thiefPossible || p.policePossible) && (!p.thiefPossible || p.thief) && (!p.policePossible || p.police);
+            });
+            worldStatus[w][2] = std::all_of(progress.begin()+a,progress.begin()+b,[](const StageProgress& p){
+                return (p.thiefPossible || p.policePossible) && (!p.thiefPossible || p.thiefBest==p.thiefOfficial) && (!p.policePossible || p.policeBest==p.policeOfficial);
+            });
+        }
         if (screen == Screen::Title) menu.drawTitle(window, titleSelected);
-        else if (screen == Screen::StageSelect) menu.drawStageSelect(window, stages, selected, progress);
-        else if (screen == Screen::HowTo) menu.drawHowTo(window);
+        else if (screen == Screen::WorldSelect) menu.drawWorldSelect(window, selectedWorld, worldStatus);
+        else if (screen == Screen::Settings) menu.drawSettings(window, settingsSelected);
+        else if (screen == Screen::KeySettings) menu.drawKeySettings(window, controls, keySelected, capturingKey, keyMessage);
+        else if (screen == Screen::DisplaySettings) menu.drawDisplaySettings(window, displaySelected, fullscreen, resolution, vsync);
+        else if (screen == Screen::StageSelect) menu.drawStageSelect(window, stages, selected, progress, selectedWorld+1, currentWorldStart(), currentWorldEnd());
+        else if (screen == Screen::HowTo) menu.drawHowTo(window, controls);
         else if (screen == Screen::Ending) menu.drawEnding(window, currentEnding);
         else {
             window.clear(sf::Color(29, 32, 42));
@@ -340,9 +479,9 @@ All changes are session-only. The normal executable has no developer shortcuts.
             sf::View hudView(sf::FloatRect({hudX - 4.f, 0.f}, {300.f, 720.f}));
             hudView.setViewport(sf::FloatRect({.7f, 0.f}, {.3f, 1.f}));
             window.setView(hudView);
-            drawHud(window, board, state, history.size(), currentFile, progress[selected]);
+            drawHud(window, board, state, history.size(), currentFile, progress[selected], controls, isUnlocked(selected+1));
             window.setView(oldView);
-            menu.drawPlayingResult(window, state);
+            menu.drawPlayingResult(window, state, controls, isUnlocked(selected+1));
         }
         window.display();
     }
