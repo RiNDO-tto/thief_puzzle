@@ -56,9 +56,11 @@ int main(int argc, char* argv[]) {
         Board candidate;
         State initial{};
         if (loadStage(stages[i], candidate, initial)) {
-            const auto reachable = solveReachability(candidate, initial);
-            progress[i].thiefPossible = reachable.thief;
-            progress[i].policePossible = reachable.police;
+            const auto shortest = solveShortestMoves(candidate, initial);
+            progress[i].thiefOfficial = shortest.thief;
+            progress[i].policeOfficial = shortest.police;
+            progress[i].thiefPossible = shortest.thief >= 0;
+            progress[i].policePossible = shortest.police >= 0;
         } else {
             progress[i].thiefPossible = false;
             progress[i].policePossible = false;
@@ -177,8 +179,15 @@ int main(int argc, char* argv[]) {
                         history.push_back(previous);
                         if (previous.result == Result::Playing && state.result == Result::Win) {
                             // A win belongs to the side controlled at the winning move.
-                            if (previous.controlThief) progress[selected].thief = true;
-                            else progress[selected].police = true;
+                            StageProgress& p = progress[selected];
+                            const int moves = static_cast<int>(history.size());
+                            if (previous.controlThief) {
+                                p.thief = true;
+                                if (p.thiefBest < 0 || moves < p.thiefBest) p.thiefBest = moves;
+                            } else {
+                                p.police = true;
+                                if (p.policeBest < 0 || moves < p.policeBest) p.policeBest = moves;
+                            }
                         }
                     }
                 }

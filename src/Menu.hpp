@@ -11,6 +11,10 @@ struct StageProgress {
     bool police = false;
     bool thiefPossible = true;
     bool policePossible = true;
+    int thiefOfficial = -1;
+    int policeOfficial = -1;
+    int thiefBest = -1;
+    int policeBest = -1;
 };
 
 class Menu {
