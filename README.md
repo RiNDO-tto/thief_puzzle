@@ -1,19 +1,68 @@
-# Thief Puzzle (SFML 3)
+# 泥棒と警察（Thief and Police）
 
-Refactored from `main2-2.cpp` and `main_gui_updated.cpp`.
+C++とSFML 3を使用して制作した、2人のキャラクターが連動して動くパズルゲームです。
 
-- `Game.hpp` / `Game.cpp`: original rules and ASCII stage loader
-- `Renderer.hpp` / `Renderer.cpp`: SFML rendering and result overlay
-- `main.cpp`: window, input, undo, restart
+## ゲーム概要
 
-Place your existing `stages/` directory in this folder.
+プレイヤーは泥棒または警察を操作し、それぞれ異なる勝利条件の達成を目指します。
 
-Build on Ubuntu/WSL:
+特徴は、**操作していないキャラクターも同時に動く**ことです。
 
-```bash
-cmake -S . -B build
-cmake --build build
-./build/thief_puzzle stages/stage01.txt
-```
+- 泥棒を操作すると、警察も同じ方向への移動を試みます。
+- 警察を操作すると、泥棒は反対方向への移動を試みます。
+- キャラクターは後退できず、壁や障害物によって移動が制限されます。
+- スイッチを利用すると、操作するキャラクターを切り替えられます。
 
-WASD: move, Z: undo, R: restart, Q/Esc: quit.
+同じステージでも、泥棒の逃走と警察の逮捕という2つの異なる目標に挑戦できます。
+
+## ゲーム内容
+
+全5ワールド・10ステージを収録しています。
+
+各ステージには最短手数が設定されており、自分の解法と比較できます。また、クリア状況に応じてエンディングが変化します。
+
+## 操作方法
+
+- 移動：W / A / S / D
+- 1手戻す：Z
+- ステージを最初からやり直す：R
+- その他の操作：ゲーム内の案内を参照
+
+キー設定や画面表示設定は、ゲーム内の設定画面から変更できます。
+
+## ダウンロード・起動方法
+
+1. GitHubの「Releases」からWindows版ZIPをダウンロードします。
+2. ZIPファイルを「すべて展開」で解凍します。
+3. `ThiefAndPolice` フォルダ内の `thief_puzzle.exe` を起動します。
+
+※ Windows向けにビルドした実行ファイルです。
+
+## Windowsのセキュリティ警告について
+
+本ゲームは個人制作であり、実行ファイルにコード署名を行っていません。
+
+そのため、WindowsのMicrosoft Defender SmartScreenによって「WindowsによってPCが保護されました」という警告が表示される場合があります。
+
+ソースコードは本リポジトリで公開しています。配布元を確認し、信頼できると判断した場合にのみ実行してください。
+
+## 開発環境
+
+- 言語：C++
+- グラフィックス：SFML 3
+- ビルド：CMake
+- バージョン管理：Git / GitHub
+
+## 技術的な工夫
+
+- 2キャラクターの連動移動と操作切り替え
+- 壁・向き・移動制約を組み合わせたパズル設計
+- 幅優先探索（BFS）による最短手数の算出
+- ステージデータを外部テキストファイルで管理
+- 開発者向けビルドと通常プレイ用ビルドの分離
+
+## ライセンス
+
+同梱フォントにはNoto Sans JPを使用しています。フォントのライセンスは `assets/fonts/OFL.txt` を参照してください。
+
+その他の同梱ライブラリ・素材のライセンスについては、別途確認・整理します。
