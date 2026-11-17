@@ -19,7 +19,7 @@ struct StageEntry { std::string path; int world; int number; };
 std::vector<StageEntry> findStages() {
     std::vector<StageEntry> result;
     if (!fs::exists("stages") || !fs::is_directory("stages")) return result;
-    const std::regex pattern(R"(^stage([1-5])-([1-9][0-9]*)\.txt$)");
+    const std::regex pattern(R"(^stage([1-6])-([1-9][0-9]*)\.txt$)");
     for (const auto& entry : fs::directory_iterator("stages")) {
         if (!entry.is_regular_file()) continue;
         std::smatch match;
@@ -42,12 +42,18 @@ int main(int argc, char* argv[]) {
     auto entries = findStages();
     std::vector<std::string> stages;
     for (const auto& entry : entries) stages.push_back(entry.path);
-    std::array<int, 6> worldStarts{};
-    for (int world = 1; world <= 5; ++world) {
-        worldStarts[world - 1] = static_cast<int>(std::count_if(entries.begin(), entries.end(),
-            [world](const StageEntry& e) { return e.world < world; }));
+    
+    std::array<int, 7> worldStarts{};
+    for (int world = 1; world <= 6; ++world) {
+        worldStarts[world - 1] = static_cast<int>(
+            std::count_if(entries.begin(), entries.end(),
+                [world](const StageEntry& e) {
+                    return e.world < world;
+                })
+        );
     }
-    worldStarts[5] = static_cast<int>(entries.size());
+    worldStarts[6] = static_cast<int>(entries.size());
+
     (void)argc; (void)argv; // Only numbered world stage files participate in progression.
     sf::RenderWindow window(sf::VideoMode({1024u, 720u}),
                             sf::String(developerMode ? std::u32string(U"Thief and Police [DEV]") : std::u32string(U"Thief and Police")));
@@ -367,7 +373,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
             } else if (screen == Screen::WorldSelect) {
                 if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
                 else if (k == sf::Keyboard::Key::Up || k == sf::Keyboard::Key::W) selectedWorld = std::max(0, selectedWorld - 1);
-                else if (k == sf::Keyboard::Key::Down || k == sf::Keyboard::Key::S) selectedWorld = std::min(4, selectedWorld + 1);
+                else if (k == sf::Keyboard::Key::Down || k == sf::Keyboard::Key::S) selectedWorld = std::min(5, selectedWorld + 1);
                 else if (k == sf::Keyboard::Key::Enter || k == sf::Keyboard::Key::Space) enterWorld(selectedWorld);
             } else if (screen == Screen::Settings) {
                 if (k == sf::Keyboard::Key::Escape) screen = Screen::Title;
@@ -454,8 +460,8 @@ All changes are session-only. The normal executable has no developer shortcuts.
                 if (screen == Screen::Playing) updateTitle(window, state);
             }
         }
-        std::array<std::array<bool, 3>, 5> worldStatus{};
-        for (int w=0;w<5;++w) {
+        std::array<std::array<bool, 3>, 6> worldStatus{};
+        for (int w=0;w<6;++w) {
             const int a=worldStarts[w], b=worldStarts[w+1];
             if (a==b) continue;
             worldStatus[w][0] = std::all_of(entries.begin()+a,entries.begin()+b,[&](const StageEntry& e){

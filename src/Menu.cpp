@@ -233,34 +233,69 @@ void Menu::drawHowTo(sf::RenderWindow& w, const Controls& controls) const {
     text(w, "Esc：タイトルへ戻る", 20, {512.f, 670.f}, ink);
 }
 
+
 namespace {
-const std::array<std::string, 5> worldNames = {
-    "まずは慣れよう", "少し発展", "片方はeasy", "スイッチ邪魔！", "できたら自慢してヨシ"
+const std::array<std::string, 6> worldNames = {
+    "まずは慣れよう",
+    "少し発展",
+    "片方はeasy",
+    "スイッチ邪魔！",
+    "できたら自慢してヨシ",
+    "木箱は敵か味方か"
 };
 }
-void Menu::drawWorldSelect(sf::RenderWindow& w, int selectedWorld,
-                           const std::array<std::array<bool, 3>, 5>& status) const {
+
+void Menu::drawWorldSelect(
+    sf::RenderWindow& w,
+    int selectedWorld,
+    const std::array<std::array<bool, 3>, 6>& status) const {
+
     w.clear(sf::Color(179, 216, 198));
     text(w, "ワールド選択", 46, {512.f, 62.f}, ink);
-    text(w, "↑↓：選択  Enter：決定  Esc：タイトル", 18, {512.f, 113.f}, ink);
-    text(w, "ランプ：全ステージ解禁 / 全目標達成 / 全目標最短", 17, {512.f, 149.f}, ink);
-    for (int i=0;i<5;++i) {
-        const float y=177.f+i*95.f;
-        block(w, {{142.f,y},{740.f,80.f}}, i==selectedWorld ? sf::Color(252,212,108) : cream);
-        text(w, "WORLD " + std::to_string(i+1) + "  " + worldNames[i], 25, {164.f,y+24.f}, ink, false);
-        for (int j=0;j<3;++j) {
+    text(w, "↑↓：選択  Enter：決定  Esc：タイトル",
+         18, {512.f, 113.f}, ink);
+    text(w, "ランプ：全ステージ解禁 / 全目標達成 / 全目標最短",
+         17, {512.f, 149.f}, ink);
+
+    for (int i = 0; i < 6; ++i) {
+        const float y = 177.f + i * 78.f;
+
+        block(w, {{142.f, y}, {740.f, 68.f}},
+              i == selectedWorld
+                  ? sf::Color(252, 212, 108)
+                  : cream);
+
+        text(w, "WORLD " + std::to_string(i + 1)
+                + "  " + worldNames[i],
+             25, {164.f, y + 18.f}, ink, false);
+
+        for (int j = 0; j < 3; ++j) {
             sf::CircleShape lamp(10.f);
-            lamp.setPosition({733.f+j*43.f,y+30.f});
-            lamp.setFillColor(status[i][j] ? (j==0 ? sf::Color(117,177,102) : j==1 ? sf::Color(82,184,238) : sf::Color(245,186,50)) : sf::Color(125,130,125));
-            lamp.setOutlineThickness(2.f); lamp.setOutlineColor(ink); w.draw(lamp);
+            lamp.setPosition({733.f + j * 43.f, y + 24.f});
+            lamp.setFillColor(
+                status[i][j]
+                    ? (j == 0 ? sf::Color(117, 177, 102)
+                       : j == 1 ? sf::Color(82, 184, 238)
+                                : sf::Color(245, 186, 50))
+                    : sf::Color(125, 130, 125)
+            );
+            lamp.setOutlineThickness(2.f);
+            lamp.setOutlineColor(ink);
+            w.draw(lamp);
         }
     }
 }
+
 int Menu::worldClick(sf::Vector2f p) const {
-    if (p.x<142.f || p.x>882.f) return -1;
-    for (int i=0;i<5;++i) if (p.y>=177.f+i*95.f && p.y<=257.f+i*95.f) return i;
+    if (p.x < 142.f || p.x > 882.f) return -1;
+
+    for (int i = 0; i < 6; ++i) {
+        const float y = 177.f + i * 78.f;
+        if (p.y >= y && p.y <= y + 68.f) return i;
+    }
     return -1;
 }
+
 void Menu::drawSettings(sf::RenderWindow& w, int selected) const {
     w.clear(sf::Color(179,216,198));
     text(w,"設定",48,{512.f,95.f},ink);

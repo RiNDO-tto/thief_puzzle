@@ -24,7 +24,7 @@ public:
     Menu();
     void drawEnding(sf::RenderWindow& window, EndingKind kind) const;
     void drawPlayingResult(sf::RenderWindow& window, const State& state, const Controls& controls, bool nextUnlocked) const;
-    void drawWorldSelect(sf::RenderWindow& window, int selectedWorld, const std::array<std::array<bool, 3>, 5>& status) const;
+    void drawWorldSelect(sf::RenderWindow& window, int selectedWorld, const std::array<std::array<bool, 3>, 6>& status) const;
     void drawSettings(sf::RenderWindow& window, int selected) const;
     void drawKeySettings(sf::RenderWindow& window, const Controls& controls, int selected, bool capturing, const std::string& message) const;
     void drawDisplaySettings(sf::RenderWindow& window, int selected, bool fullscreen, int resolution, bool vsync) const;
