@@ -96,7 +96,7 @@ void drawCharacter(sf::RenderWindow& window, const Character& c,
     window.draw(arrow);
 }
 
-void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
+void drawBoard(sf::RenderWindow& window, const Board& b, const State& s, float boxProgress) {
     static CharacterTextures textures;
     auto drawTileImage = [&](const sf::Texture& texture, sf::Vector2f pos) {
         const sf::Vector2u sz = texture.getSize();
@@ -161,9 +161,24 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
                      {TILE + WALL_THICKNESS, WALL_THICKNESS}, wallColor);
         }
     }
+    // Move each surviving crate from its previous cell to its destination.
+    // The authoritative state is already updated; this is visual-only.
+    boxProgress = std::clamp(boxProgress, 0.f, 1.f);
+    boxProgress = boxProgress * boxProgress * (3.f - 2.f * boxProgress);
     // Draw dynamic boxes above floor tiles, below characters.
     for (const Position& box : s.boxes) {
         sf::Vector2f pos(MARGIN + box.x * TILE, MARGIN + box.y * TILE);
+        if (boxProgress < 1.f) {
+            for (const BoxMotion& motion : s.boxMotions) {
+                if (motion.to.x == box.x && motion.to.y == box.y) {
+                    pos.x = MARGIN + (motion.from.x +
+                        (motion.to.x - motion.from.x) * boxProgress) * TILE;
+                    pos.y = MARGIN + (motion.from.y +
+                        (motion.to.y - motion.from.y) * boxProgress) * TILE;
+                    break;
+                }
+            }
+        }
         if (textures.boxReady) {
             drawTileImage(textures.box, pos);
         } else {

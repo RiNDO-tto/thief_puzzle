@@ -114,6 +114,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
     std::vector<Position> visibleClicks;
     sf::Clock crashClock;
     sf::Clock clickClock;
+    sf::Clock boxMotionClock;
     std::string currentFile;
     int selected = 0;
     int titleSelected = 0;
@@ -443,6 +444,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
                         crashClock.restart();
                         visibleClicks = state.pushes;
                         clickClock.restart();
+                        boxMotionClock.restart();
                         if (previous.result == Result::Playing && state.result == Result::Win) {
                             // A win belongs to the side controlled at the winning move.
                             StageProgress& p = progress[selected];
@@ -493,9 +495,22 @@ All changes are session-only. The normal executable has no developer shortcuts.
             boardView.setCenter({boardW / 2.f, boardH / 2.f});
             boardView.setViewport(sf::FloatRect({0.f, 0.f}, {.7f, 1.f}));
             window.setView(boardView);
-            drawBoard(window, board, state);
+            constexpr float boxAnimationSeconds = 0.16f;
+            const float boxProgress = std::min(1.f,
+                boxMotionClock.getElapsedTime().asSeconds() / boxAnimationSeconds);
+            drawBoard(window, board, state, boxProgress);
             drawCrashEffects(window, visibleCrashes, crashClock.getElapsedTime().asSeconds());
-            drawClickEffects(window, visibleClicks, clickClock.getElapsedTime().asSeconds());
+            // Delay CLICK only at cells where CRASH also occurred this turn.
+            const float clickElapsed = clickClock.getElapsedTime().asSeconds();
+            std::vector<Position> immediateClicks, delayedClicks;
+            for (const Position& q : visibleClicks) {
+                const bool sharedCell = std::any_of(visibleCrashes.begin(), visibleCrashes.end(),
+                    [&](const Position& c) { return c.x == q.x && c.y == q.y; });
+                (sharedCell ? delayedClicks : immediateClicks).push_back(q);
+            }
+            drawClickEffects(window, immediateClicks, clickElapsed);
+            if (clickElapsed >= 0.3f)
+                drawClickEffects(window, delayedClicks, clickElapsed - 0.3f);
             // HUD retains its original 268-unit layout in a separate viewport.
             const float hudX = 60.f + board.width * 76.f + 16.f;
             sf::View hudView(sf::FloatRect({hudX - 4.f, 0.f}, {300.f, 720.f}));

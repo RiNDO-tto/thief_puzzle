@@ -333,6 +333,7 @@ bool takeTurn(const Board& b, State& s, int d) {
     State next=s;
     next.crashes.clear();
     next.pushes.clear();
+    next.boxMotions.clear();
     next.boxes.clear();
     std::set<Cell> crashSet;
     for (auto& entry:destinations) {
@@ -349,7 +350,16 @@ bool takeTurn(const Board& b, State& s, int d) {
         else if (character && incomingBox) survivors=0;
         else if (survivors>1) survivors=1; // two moving crates collide: destroy one
         if (survivors < static_cast<int>(incoming.size())) crashSet.insert(target);
-        if (survivors) next.boxes.push_back({target.first,target.second});
+        if (survivors) {
+            next.boxes.push_back({target.first,target.second});
+            // Match the surviving crate with one of the sources. Prefer a
+            // stationary crate when the destination is already occupied.
+            Cell source = incoming.front();
+            for (Cell c : incoming) if (c == target) { source = c; break; }
+            if (source != target)
+                next.boxMotions.push_back({{source.first,source.second},
+                                           {target.first,target.second}});
+        }
     }
     for (Cell c:crashSet) next.crashes.push_back({c.first,c.second});
     next.thief.x=nt.first; next.thief.y=nt.second;

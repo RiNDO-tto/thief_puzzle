@@ -3,7 +3,7 @@
 #include "Menu.hpp"
 #include <SFML/Graphics.hpp>
 
-void drawBoard(sf::RenderWindow& window, const Board& board, const State& state);
+void drawBoard(sf::RenderWindow& window, const Board& board, const State& state, float boxProgress = 1.f);
 void drawResultOverlay(sf::RenderWindow& window, const State& state);
 void updateTitle(sf::RenderWindow& window, const State& state);
 
