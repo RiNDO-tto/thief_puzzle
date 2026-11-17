@@ -1,6 +1,9 @@
 #include "Game.hpp"
 #include <iostream>
 #include <fstream>
+#include <algorithm>
+#include <map>
+#include <set>
 
 using namespace std;
 const int dx[4] = {0, 1, 0, -1};
@@ -38,7 +41,7 @@ bool isStuck(const Board& b, const State& s) {
 
     for (int d = 0; d < 4; ++d) {
         if (d != opposite(c.direction) &&
-            canMove(b, c, d)) {
+            ([&]() { State probe = s; return takeTurn(b, probe, d); })()) {
             return false;
         }
     }
@@ -98,6 +101,8 @@ bool loadStage(const string& filename, Board& b, State& s) {
         h, vector<array<bool, 4>>(w, {false, false, false, false})
     );
 
+    s.boxes.clear();
+    s.crashes.clear();
     int thiefCount = 0;
     int policeCount = 0;
 
@@ -172,8 +177,12 @@ bool loadStage(const string& filename, Board& b, State& s) {
                      (token[0] == '.' ||
                       token[0] == 'A' ||
                       token[0] == 'S' ||
-                      token[0] == 'X')) {
-                b.cell[y][x] = token[0];
+                      token[0] == 'X' ||
+                       token[0] == 'B')) {
+                if (token[0] == 'B') {
+                    b.cell[y][x] = '.';
+                    s.boxes.push_back({x, y});
+                } else b.cell[y][x] = token[0];
             }
             else {
                 cerr << "Invalid cell at ("
@@ -218,107 +227,162 @@ bool loadStage(const string& filename, Board& b, State& s) {
     return true;
 }
 
-// Advance the game by one valid move.
+// All proposed positions are computed from the OLD state. Never mutate it during resolution.
+namespace {
+using Cell = std::pair<int,int>;
+Cell cell(int x, int y) { return {x,y}; }
+Cell nextCell(Cell c, int d) { return {c.first + dx[d], c.second + dy[d]}; }
+bool edgeOpen(const Board& b, Cell c, int d) {
+    Cell n = nextCell(c,d);
+    return isInside(b,n.first,n.second) && !b.wall[c.second][c.first][d];
+}
+struct Intent {
+    Cell origin, destination;
+    int direction;
+    bool moving = false;
+    bool pushes = false;
+    std::vector<Cell> chain;
+};
+Intent plan(const Board& b, Cell origin, int dir, const std::set<Cell>& boxes) {
+    Intent r;
+    r.origin = origin; r.destination = origin; r.direction = dir;
+    Cell cursor = origin;
+    while (edgeOpen(b,cursor,dir)) {
+        cursor = nextCell(cursor,dir);
+        if (!boxes.count(cursor)) {
+            r.moving = true;
+            r.destination = nextCell(origin,dir);
+            r.pushes = !r.chain.empty();
+            return r;
+        }
+        r.chain.push_back(cursor);
+    }
+    return r; // wall or board boundary prevents entire chain
+}
+}
+
 bool takeTurn(const Board& b, State& s, int d) {
     if (s.result != Result::Playing) {
         s.message = "終了しました。Z：戻す / R：やり直す";
         return false;
     }
-
-    const Character& controlled =
-        s.controlThief ? s.thief : s.police;
-
-    // 1. No backward movement for the controlled side.
-    if (d == opposite(controlled.direction)) {
+    const Character& active = s.controlThief ? s.thief : s.police;
+    if (d == opposite(active.direction)) {
         s.message = "後ろには進めません！";
         return false;
     }
+    std::set<Cell> boxes;
+    for (auto box : s.boxes) boxes.insert(cell(box.x,box.y));
+    const int td = s.controlThief ? d : opposite(d);
+    const int pd = d;
+    Intent t = plan(b,cell(s.thief.x,s.thief.y),td,boxes);
+    Intent p = plan(b,cell(s.police.x,s.police.y),pd,boxes);
 
-    // 2. Invalid controlled movement cancels the turn.
-    if (!canMove(b, controlled, d)) {
-        s.message = "壁があって進めません！";
+    // An occupied destination can block a moving chain if the character ahead
+    // cannot vacate it. Conversely, opposing moving characters can crush a box.
+    // Re-evaluate until the two movement flags stabilize.
+    for (int iteration=0; iteration<4; ++iteration) {
+        bool tm=t.moving, pm=p.moving;
+        auto blocks = [&](const Intent& a, const Intent& other) {
+            if (!a.moving) return false;
+            Cell tip = a.chain.empty() ? a.destination : nextCell(a.chain.back(),a.direction);
+            if (tip != other.origin) return false;
+            // A box arriving at an opposing moving character is destroyed.
+            if (!a.chain.empty() && other.moving && other.direction == opposite(a.direction)) return false;
+            // Character/box occupying a vacated cell is fine.
+            return !other.moving;
+        };
+        if (blocks(t,p)) t.moving=false;
+        if (blocks(p,t)) p.moving=false;
+        if (t.moving==tm && p.moving==pm) break;
+    }
+    // Two opposing pushes into a contiguous chain cannot proceed.
+    if (t.moving && p.moving && td==opposite(pd) && !t.chain.empty() && !p.chain.empty()) {
+        for (Cell c : t.chain) {
+            if (std::find(p.chain.begin(),p.chain.end(),c)!=p.chain.end()) {
+                t.moving=false; p.moving=false; break;
+            }
+        }
+    }
+    if (!(s.controlThief ? t.moving : p.moving)) {
+        s.message = "木箱か壁に阻まれて進めません！";
         return false;
     }
-
-    State next = s;
+    // Record box movement requests, using old positions as unique identifiers.
+    std::map<Cell,int> requests;
+    if (t.moving) for (Cell c:t.chain) requests[c]=td;
+    if (p.moving) for (Cell c:p.chain) {
+        if (requests.count(c) && requests[c]!=pd) {
+            // This can only occur for an opposed, immovable chain.
+            s.message = "木箱を両側から押しているため動けません！";
+            return false;
+        }
+        requests[c]=pd;
+    }
+    Cell nt=t.moving?t.destination:t.origin;
+    Cell np=p.moving?p.destination:p.origin;
+    std::map<Cell,std::vector<Cell>> destinations;
+    for (Cell c:boxes) {
+        Cell target = requests.count(c) ? nextCell(c,requests[c]) : c;
+        destinations[target].push_back(c);
+    }
+    State next=s;
+    next.crashes.clear();
+    next.boxes.clear();
+    std::set<Cell> crashSet;
+    for (auto& entry:destinations) {
+        Cell target=entry.first;
+        const auto& incoming=entry.second;
+        bool spike = b.cell[target.second][target.first]=='X';
+        bool character = (target==nt || target==np);
+        // Stationary boxes do not disappear simply because a character would
+        // occupy them; this should have been prevented by the movement check.
+        bool incomingBox = false;
+        for (Cell c:incoming) incomingBox |= requests.count(c)>0;
+        int survivors = static_cast<int>(incoming.size());
+        if (spike) survivors=0;
+        else if (character && incomingBox) survivors=0;
+        else if (survivors>1) survivors=1; // two moving crates collide: destroy one
+        if (survivors < static_cast<int>(incoming.size())) crashSet.insert(target);
+        if (survivors) next.boxes.push_back({target.first,target.second});
+    }
+    for (Cell c:crashSet) next.crashes.push_back({c.first,c.second});
+    next.thief.x=nt.first; next.thief.y=nt.second;
+    next.police.x=np.first; next.police.y=np.second;
+    if (t.moving) next.thief.direction=td;
+    if (p.moving || (s.controlThief && !p.moving)) next.police.direction=pd;
+    if (!s.controlThief && !t.moving) next.thief.direction=td;
     next.message.clear();
-
-    Character& moving =
-        s.controlThief ? next.thief : next.police;
-
-    Character& other =
-        s.controlThief ? next.police : next.thief;
-
-    int oldTx = s.thief.x, oldTy = s.thief.y;
-    int oldPx = s.police.x, oldPy = s.police.y;
-
-    moving.x += dx[d];
-    moving.y += dy[d];
-    moving.direction = d;
-
-    int otherDir = s.controlThief ? d : opposite(d);
-
-    if (canMove(b, other, otherDir)) {
-        other.x += dx[otherDir];
-        other.y += dy[otherDir];
+    bool spike=b.cell[nt.second][nt.first]=='X' || b.cell[np.second][np.first]=='X';
+    bool same=nt==np;
+    bool crossed=nt==p.origin && np==t.origin;
+    if (spike) {
+        next.result=Result::Lose;
+        next.message="トゲに触れてしまいました！";
+    } else if (same || crossed) {
+        next.result=s.controlThief?Result::Lose:Result::Win;
+        next.message=s.controlThief?"泥棒が逮捕されました！":"警察が泥棒を逮捕しました！";
+    } else if (b.cell[nt.second][nt.first]=='A') {
+        next.result=s.controlThief?Result::Win:Result::Lose;
+        next.message=s.controlThief?"泥棒がアジトに到着しました！":"泥棒が逃げ切りました！";
     }
-
-    // Facing changes even when the other character is blocked.
-    other.direction = otherDir;
-
-    // 3. Spikes take priority over every other result.
-    bool onSpike =
-        b.cell[next.thief.y][next.thief.x] == 'X' ||
-        b.cell[next.police.y][next.police.x] == 'X';
-
-    if (onSpike) {
-        next.result = Result::Lose;
-        next.message = "トゲに触れてしまいました！";
-    }
-    else {
-        // 4. Meeting or crossing.
-        bool sameCell =
-            next.thief.x == next.police.x &&
-            next.thief.y == next.police.y;
-
-        bool crossed =
-            next.thief.x == oldPx &&
-            next.thief.y == oldPy &&
-            next.police.x == oldTx &&
-            next.police.y == oldTy;
-
-        if (sameCell || crossed) {
-            next.result =
-                s.controlThief ? Result::Lose : Result::Win;
-
-            next.message = s.controlThief
-                ? "泥棒が逮捕されました！"
-                : "警察が泥棒を逮捕しました！";
+    if (next.result==Result::Playing) {
+        int switches=0;
+        Cell controlledBefore=s.controlThief?t.origin:p.origin;
+        Cell controlledAfter=s.controlThief?nt:np;
+        if (controlledBefore!=controlledAfter && b.cell[controlledAfter.second][controlledAfter.first]=='S') ++switches;
+        for (auto box:next.boxes) {
+            Cell c=cell(box.x,box.y);
+            if (b.cell[c.second][c.first]=='S' && requests.size()) {
+                // Only a box that actually entered the switch activates it.
+                for (auto& req:requests) if (nextCell(req.first,req.second)==c) { ++switches; break; }
+            }
         }
-        else if (b.cell[next.thief.y][next.thief.x] == 'A') {
-            // 5. Thief reaches hideout.
-            next.result =
-                s.controlThief ? Result::Win : Result::Lose;
-
-            next.message = s.controlThief
-                ? "泥棒がアジトに到着しました！"
-                : "泥棒が逃げ切りました！";
+        if (switches%2) {
+            next.controlThief=!s.controlThief;
+            next.message="スイッチで操作が交代しました！";
         }
     }
-
-    // 6. Only the controlled character activates a switch
-    // by entering its cell. Terminal results take priority.
-    if (next.result == Result::Playing) {
-        const Character& c =
-            s.controlThief ? next.thief : next.police;
-
-        if (b.cell[c.y][c.x] == 'S') {
-            next.controlThief = !s.controlThief;
-            next.message = "スイッチで操作が交代しました！";
-        }
-    }
-
-    s = next;
+    s=std::move(next);
     return true;
 }
-

@@ -8,7 +8,10 @@ extern const int dx[4];
 extern const int dy[4];
 enum class Result { Playing, Win, Lose };
 struct Character { int x, y, direction; };
+struct Position { int x, y; };
 struct State {
+    std::vector<Position> boxes;
+    std::vector<Position> crashes; // transient rendering events, not part of BFS identity
     Character thief;
     Character police;
     bool controlThief = true;

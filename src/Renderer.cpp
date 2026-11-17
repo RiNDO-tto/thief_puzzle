@@ -27,6 +27,8 @@ struct CharacterTextures {
     bool switchReady = false;
     sf::Texture thief;
     sf::Texture police;
+    sf::Texture box;
+    bool boxReady = false;
     bool thiefReady = false;
     bool policeReady = false;
 
@@ -36,11 +38,13 @@ struct CharacterTextures {
         switchReady = sw.loadFromFile("assets/images/switch.png");
         thiefReady = thief.loadFromFile("assets/images/thief.jpg");
         policeReady = police.loadFromFile("assets/images/police.jpg");
+        boxReady = box.loadFromFile("assets/images/box.png");
         if (hideoutReady) hideout.setSmooth(true);
         if (spikesReady) spikes.setSmooth(true);
         if (switchReady) sw.setSmooth(true);
         if (thiefReady) thief.setSmooth(true);
         if (policeReady) police.setSmooth(true);
+        if (boxReady) box.setSmooth(true);
     }
 };
 
@@ -157,10 +161,46 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
                      {TILE + WALL_THICKNESS, WALL_THICKNESS}, wallColor);
         }
     }
+    // Draw dynamic boxes above floor tiles, below characters.
+    for (const Position& box : s.boxes) {
+        sf::Vector2f pos(MARGIN + box.x * TILE, MARGIN + box.y * TILE);
+        if (textures.boxReady) {
+            drawTileImage(textures.box, pos);
+        } else {
+            rect(window, pos + sf::Vector2f(10.f, 10.f),
+                 {TILE - 20.f, TILE - 20.f}, sf::Color(160, 105, 55));
+            rect(window, pos + sf::Vector2f(18.f, 18.f),
+                 {TILE - 36.f, TILE - 36.f}, sf::Color(195, 139, 76));
+        }
+    }
     drawCharacter(window, s.thief, textures.thiefReady ? &textures.thief : nullptr,
                   sf::Color(67, 154, 244), s.controlThief);
     drawCharacter(window, s.police, textures.policeReady ? &textures.police : nullptr,
                   sf::Color(240, 95, 99), !s.controlThief);
+}
+
+// Visual-only effect. Positions come from the last successful move;
+// lifetime is controlled by main.cpp, not by the BFS state.
+void drawCrashEffects(sf::RenderWindow& window, const std::vector<Position>& positions, float elapsedSeconds) {
+    constexpr float duration = 0.25f;
+    if (positions.empty() || elapsedSeconds >= duration) return;
+    static sf::Texture crashTexture;
+    static bool ready = crashTexture.loadFromFile("assets/images/crash.png");
+    if (!ready) return;
+    const sf::Vector2u sz = crashTexture.getSize();
+    if (!sz.x || !sz.y) return;
+    const float t = std::clamp(elapsedSeconds / duration, 0.f, 1.f);
+    const float width = TILE * (1.30f + 0.20f * t);
+    const float scale = width / static_cast<float>(sz.x);
+    const auto alpha = static_cast<std::uint8_t>(255.f * (1.f - t * t));
+    for (const Position& p : positions) {
+        sf::Sprite sprite(crashTexture);
+        sprite.setOrigin({sz.x / 2.f, sz.y / 2.f});
+        sprite.setPosition({MARGIN + (p.x + .5f) * TILE, MARGIN + (p.y + .5f) * TILE});
+        sprite.setScale({scale, scale});
+        sprite.setColor(sf::Color(255, 255, 255, alpha));
+        window.draw(sprite);
+    }
 }
 
 // Draw large WIN / LOSE letters without requiring an external font file.

@@ -3,13 +3,19 @@
 #include <unordered_set>
 #include <string>
 #include <utility>
+#include <algorithm>
 
 namespace {
 std::string key(const State& s) {
-    return std::to_string(s.thief.x) + "," + std::to_string(s.thief.y) + "," +
+    std::string result = std::to_string(s.thief.x) + "," + std::to_string(s.thief.y) + "," +
         std::to_string(s.thief.direction) + "," + std::to_string(s.police.x) + "," +
         std::to_string(s.police.y) + "," + std::to_string(s.police.direction) + "," +
         (s.controlThief ? "T" : "P");
+    std::vector<std::pair<int,int>> boxes;
+    for (auto p:s.boxes) boxes.push_back({p.x,p.y});
+    std::sort(boxes.begin(),boxes.end());
+    for (auto p:boxes) result += ";" + std::to_string(p.first) + "," + std::to_string(p.second);
+    return result;
 }
 }
 ShortestMoves solveShortestMoves(const Board& board, const State& initial) {
