@@ -16,6 +16,8 @@ string cellText(const Board& b, const State& s,
     if (t && p) return "TP";
     if (t) return "T" + ARROWS[s.thief.direction];
     if (p) return "P" + ARROWS[s.police.direction];
+    for (const Position& box : s.boxes)
+        if (box.x == x && box.y == y) return "B ";
 
     return string(1, b.cell[y][x]) + " ";
 }
@@ -77,13 +79,18 @@ void printBoard(const Board& b, const State& s) {
 // BFS distinguishes positions, facing directions, and control.
 // Terminal states are not expanded.
 string stateKey(const State& s) {
-    return to_string(s.thief.x) + "," +
+    string result = to_string(s.thief.x) + "," +
            to_string(s.thief.y) + "," +
            to_string(s.thief.direction) + "," +
            to_string(s.police.x) + "," +
            to_string(s.police.y) + "," +
            to_string(s.police.direction) + "," +
            (s.controlThief ? "T" : "P");
+    vector<pair<int,int>> boxes;
+    for (const Position& b : s.boxes) boxes.push_back({b.x,b.y});
+    sort(boxes.begin(),boxes.end());
+    for (auto [x,y] : boxes) result += ";" + to_string(x) + "," + to_string(y);
+    return result;
 }
 
 struct SearchNode {
@@ -237,6 +244,9 @@ void printSolution(const SearchResult& result,
             cout << "  WIN";
         }
 
+        cout << "  Boxes=" << s.boxes.size();
+        if (!s.crashes.empty()) cout << "  CRASH=" << s.crashes.size();
+        if (!s.pushes.empty()) cout << "  PUSH=" << s.pushes.size();
         cout << "\n";
     }
 }

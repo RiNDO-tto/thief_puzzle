@@ -105,7 +105,9 @@ All changes are session-only. The normal executable has no developer shortcuts.
     State initialState{};
     std::vector<State> history;
     std::vector<Position> visibleCrashes;
+    std::vector<Position> visibleClicks;
     sf::Clock crashClock;
+    sf::Clock clickClock;
     std::string currentFile;
     int selected = 0;
     int titleSelected = 0;
@@ -202,6 +204,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
         initialState = state;
         history.clear();
         visibleCrashes.clear();
+        visibleClicks.clear();
         currentFile = stages[index];
         selected = index;
         selectedWorld = entries[index].world - 1;
@@ -416,11 +419,13 @@ All changes are session-only. The normal executable has no developer shortcuts.
                     state = initialState;
                     history.clear();
                     visibleCrashes.clear();
+                    visibleClicks.clear();
                     state.message = "ステージをやり直しました！";
                 } else if (controls.matches(Action::Undo, k)) {
                     if (!history.empty()) {
                         state = history.back(); history.pop_back();
                         visibleCrashes.clear();
+                    visibleClicks.clear();
                         state.message = "1手戻しました。";
                     } else state.message = "戻せる手がありません！";
                 }
@@ -430,6 +435,8 @@ All changes are session-only. The normal executable has no developer shortcuts.
                         history.push_back(previous);
                         visibleCrashes = state.crashes;
                         crashClock.restart();
+                        visibleClicks = state.pushes;
+                        clickClock.restart();
                         if (previous.result == Result::Playing && state.result == Result::Win) {
                             // A win belongs to the side controlled at the winning move.
                             StageProgress& p = progress[selected];
@@ -482,6 +489,7 @@ All changes are session-only. The normal executable has no developer shortcuts.
             window.setView(boardView);
             drawBoard(window, board, state);
             drawCrashEffects(window, visibleCrashes, crashClock.getElapsedTime().asSeconds());
+            drawClickEffects(window, visibleClicks, clickClock.getElapsedTime().asSeconds());
             // HUD retains its original 268-unit layout in a separate viewport.
             const float hudX = 60.f + board.width * 76.f + 16.f;
             sf::View hudView(sf::FloatRect({hudX - 4.f, 0.f}, {300.f, 720.f}));

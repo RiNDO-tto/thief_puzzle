@@ -12,6 +12,7 @@ struct Position { int x, y; };
 struct State {
     std::vector<Position> boxes;
     std::vector<Position> crashes; // transient rendering events, not part of BFS identity
+    std::vector<Position> pushes; // one entry per switch activation, including duplicates
     Character thief;
     Character police;
     bool controlThief = true;

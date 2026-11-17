@@ -103,6 +103,7 @@ bool loadStage(const string& filename, Board& b, State& s) {
 
     s.boxes.clear();
     s.crashes.clear();
+    s.pushes.clear();
     int thiefCount = 0;
     int policeCount = 0;
 
@@ -287,6 +288,9 @@ bool takeTurn(const Board& b, State& s, int d) {
             if (!a.moving) return false;
             Cell tip = a.chain.empty() ? a.destination : nextCell(a.chain.back(),a.direction);
             if (tip != other.origin) return false;
+            // Characters may overlap: meeting is resolved as capture, even
+            // when the other character cannot move because of a wall.
+            if (a.chain.empty()) return false;
             // A box arriving at an opposing moving character is destroyed.
             if (!a.chain.empty() && other.moving && other.direction == opposite(a.direction)) return false;
             // Character/box occupying a vacated cell is fine.
@@ -328,6 +332,7 @@ bool takeTurn(const Board& b, State& s, int d) {
     }
     State next=s;
     next.crashes.clear();
+    next.pushes.clear();
     next.boxes.clear();
     std::set<Cell> crashSet;
     for (auto& entry:destinations) {
@@ -367,20 +372,23 @@ bool takeTurn(const Board& b, State& s, int d) {
         next.message=s.controlThief?"泥棒がアジトに到着しました！":"泥棒が逃げ切りました！";
     }
     if (next.result==Result::Playing) {
-        int switches=0;
         Cell controlledBefore=s.controlThief?t.origin:p.origin;
         Cell controlledAfter=s.controlThief?nt:np;
-        if (controlledBefore!=controlledAfter && b.cell[controlledAfter.second][controlledAfter.first]=='S') ++switches;
-        for (auto box:next.boxes) {
-            Cell c=cell(box.x,box.y);
-            if (b.cell[c.second][c.first]=='S' && requests.size()) {
-                // Only a box that actually entered the switch activates it.
-                for (auto& req:requests) if (nextCell(req.first,req.second)==c) { ++switches; break; }
-            }
+        if (controlledBefore!=controlledAfter && b.cell[controlledAfter.second][controlledAfter.first]=='S')
+            next.pushes.push_back({controlledAfter.first, controlledAfter.second});
+        // Count every crate that ENTERED a switch; resting on it does not count.
+        // The destination must still contain that crate after collision resolution.
+        for (auto& req:requests) {
+            Cell dest=nextCell(req.first,req.second);
+            if (b.cell[dest.second][dest.first]!='S') continue;
+            if (std::any_of(next.boxes.begin(),next.boxes.end(),[&](Position q){return q.x==dest.first && q.y==dest.second;}))
+                next.pushes.push_back({dest.first,dest.second});
         }
-        if (switches%2) {
+        if (next.pushes.size()%2) {
             next.controlThief=!s.controlThief;
             next.message="スイッチで操作が交代しました！";
+        } else if (!next.pushes.empty()) {
+            next.message="スイッチが複数回押されました！";
         }
     }
     s=std::move(next);

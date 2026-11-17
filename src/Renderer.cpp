@@ -182,7 +182,7 @@ void drawBoard(sf::RenderWindow& window, const Board& b, const State& s) {
 // Visual-only effect. Positions come from the last successful move;
 // lifetime is controlled by main.cpp, not by the BFS state.
 void drawCrashEffects(sf::RenderWindow& window, const std::vector<Position>& positions, float elapsedSeconds) {
-    constexpr float duration = 0.25f;
+    constexpr float duration = 0.5f;
     if (positions.empty() || elapsedSeconds >= duration) return;
     static sf::Texture crashTexture;
     static bool ready = crashTexture.loadFromFile("assets/images/crash.png");
@@ -199,6 +199,35 @@ void drawCrashEffects(sf::RenderWindow& window, const std::vector<Position>& pos
         sprite.setPosition({MARGIN + (p.x + .5f) * TILE, MARGIN + (p.y + .5f) * TILE});
         sprite.setScale({scale, scale});
         sprite.setColor(sf::Color(255, 255, 255, alpha));
+        window.draw(sprite);
+    }
+}
+
+// CLICK switch popup: same lifetime, size and fade as CRASH. Duplicate positions
+// are deliberately drawn multiple times with a slight offset per activation.
+void drawClickEffects(sf::RenderWindow& window, const std::vector<Position>& positions, float elapsedSeconds) {
+    constexpr float duration = 0.5f;
+    if (positions.empty() || elapsedSeconds >= duration) return;
+    static sf::Texture texture;
+    static bool ready = texture.loadFromFile("assets/images/click.png");
+    if (!ready) return; // The user can add the designed image later.
+    const sf::Vector2u sz = texture.getSize();
+    if (!sz.x || !sz.y) return;
+    const float t = std::clamp(elapsedSeconds / duration, 0.f, 1.f);
+    const float width = TILE * (1.30f + 0.20f * t);
+    const float scale = width / static_cast<float>(sz.x);
+    const auto alpha = static_cast<std::uint8_t>(255.f * (1.f - t * t));
+    for (std::size_t i=0;i<positions.size();++i) {
+        const Position& q=positions[i];
+        int stacked=0;
+        for (std::size_t j=0;j<i;++j)
+            if (positions[j].x==q.x && positions[j].y==q.y) ++stacked;
+        sf::Sprite sprite(texture);
+        sprite.setOrigin({sz.x/2.f,sz.y/2.f});
+        sprite.setPosition({MARGIN+(q.x+.5f)*TILE + stacked*9.f,
+                            MARGIN+(q.y+.5f)*TILE - stacked*9.f});
+        sprite.setScale({scale,scale});
+        sprite.setColor(sf::Color(255,255,255,alpha));
         window.draw(sprite);
     }
 }

@@ -12,3 +12,4 @@ void drawHud(sf::RenderWindow& window, const Board& board, const State& state,
 
 // Timed overlay; call after drawBoard while the board view is active.
 void drawCrashEffects(sf::RenderWindow& window, const std::vector<Position>& positions, float elapsedSeconds);
+void drawClickEffects(sf::RenderWindow& window, const std::vector<Position>& positions, float elapsedSeconds);
