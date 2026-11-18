@@ -22,4 +22,6 @@ em++ -std=c++17 -O2 src/Game.cpp web/bridge.cpp \
   --preload-file stages@/stages \
   -o web/dist/game.js
 cp web/index.html web/play.js web/dist/
+mkdir -p web/dist/assets
+cp web/assets/* web/dist/assets/
 echo 'web/dist/ に出力しました。python3 -m http.server 8000 --directory web/dist で確認できます。'
