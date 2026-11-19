@@ -26,8 +26,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
+      - name: Build Web version
+        run: bash web/build-web.sh
 
       - name: Upload web files
         uses: actions/upload-pages-artifact@v4
